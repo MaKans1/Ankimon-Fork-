@@ -39,6 +39,10 @@ from ..resources import addon_dir, frontdefault
 from ..const import total_generations
 from .error_handler import show_warning_with_traceback
 
+# Ankimon 2.0: the starter screen is by region (generation n's starters = region n)
+REGION_NAMES = ["Kanto", "Johto", "Hoenn", "Sinnoh", "Unova", "Kalos", "Alola", "Galar", "Paldea"]
+
+
 class StarterWindow(QWidget):
     def __init__(
             self,
@@ -59,7 +63,7 @@ class StarterWindow(QWidget):
     def init_ui(self):
         basic_layout = QVBoxLayout()
         # Set window
-        self.setWindowTitle('Choose a Starter')
+        self.setWindowTitle('Choose your region and Starter')
         self.setLayout(basic_layout)
         self.starter = False
 
@@ -76,15 +80,21 @@ class StarterWindow(QWidget):
             if widget:
                 widget.deleteLater()
     def keyPressEvent(self, event):
-        # Close the main window when the spacebar is pressed
-        if event.key() == Qt.Key.Key_G:  # Updated to Key_G for PyQt 6
-            # First encounter image
-            if not self.starter:
-                self.current_gen = (self.current_gen + 1) % total_generations
-                self.display_starter_pokemon()
-            # If self.starter is True, simply pass (do nothing)
-            else:
-                pass
+        # Regions: G / Right = next, Shift+G / Left = previous (until a starter is picked)
+        if self.starter:
+            return
+        k = event.key()
+        if k not in (Qt.Key.Key_G, Qt.Key.Key_Right, Qt.Key.Key_Left):
+            return
+        back = k == Qt.Key.Key_Left or (
+            k == Qt.Key.Key_G and bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier))
+        self.current_gen = (self.current_gen + (-1 if back else 1)) % total_generations
+        self.display_starter_pokemon()
+
+    def region_name(self, i=None):
+        """Region i (default: the one shown). Generation n's starters = region n."""
+        i = self.current_gen if i is None else i
+        return REGION_NAMES[i % len(REGION_NAMES)]
 
     def choose_pokemon(self, starter_name):
         # Create a dictionary to store the Pokémon's data
@@ -154,14 +164,76 @@ class StarterWindow(QWidget):
         db.save_pokemon(caught_pokemon_data)
         db.save_main_pokemon(main_pokemon.to_dict())
 
-        self.logger.log_and_showinfo("info",f"{_pname(name)} has been chosen as Starter Pokémon !")
+        self.logger.log("info", f"{_pname(name)} has been chosen as Starter Pokémon !")
 
         self.display_chosen_starter_pokemon(starter_name)
 
         from ..singletons import pokemon_pc
         pokemon_pc.refresh_pokemon_grid()
 
-        close_anki()
+        # Ankimon 2.0: no restart - the journey starts right away
+        self._start_journey()
+
+    def _start_journey(self):
+        """After the starter: start in that region, ask for the daily card goal,
+        load the starter into the running game and send out the first wild Pokémon."""
+        region = self.region_name()
+        from .. import singletons as S
+        try:
+            from ..functions.update_main_pokemon import update_main_pokemon
+            update_main_pokemon(S.main_pokemon)
+        except Exception as e:
+            self.logger.log("error", "starter not loaded live: %s" % e)
+        try:
+            from ..wild import wild_rules
+            wild_rules.set_region(region)
+        except ImportError:
+            pass                                # wild package not installed
+        self._ask_daily_goal()
+        try:
+            from ..functions.encounter_functions import new_pokemon
+            new_pokemon(S.enemy_pokemon, S.test_window, S.ankimon_tracker_obj, S.reviewer_obj)
+        except Exception as e:
+            self.logger.log("error", "first encounter failed: %s" % e)
+        try:
+            from ..wild import wild_menus
+            wild_menus._refresh_hud()
+        except Exception:
+            pass
+        from aqt.utils import showInfo
+        showInfo("%s is ready! Your journey starts in %s.\n\nReview cards to battle wild Pokémon. "
+                 "You can travel to other regions any time from Ankimon > Game > Travel."
+                 % (_pname(getattr(S.main_pokemon, "name", "Your Pokémon")), region), parent=self)
+
+    def _ask_daily_goal(self):
+        """Gym intervals and EXP are paced to this (functions/pacing.py)."""
+        from aqt.qt import QInputDialog
+        try:
+            cur = int(self.settings_obj.get("battle.daily_average", 100) or 100)
+        except (TypeError, ValueError):
+            cur = 100
+        goal, ok = QInputDialog.getInt(
+            self, "Your daily card goal",
+            "About how many cards do you review on a typical day?\n\n"
+            "Gyms and EXP are paced to it, so the adventure lasts a few months at your pace.\n"
+            "You can change it any time in Ankimon's Settings.",
+            cur, 10, 5000, 10)
+        if not ok:
+            return
+        values = {"battle.daily_average": goal}
+        try:
+            from ..functions import pacing
+            values.update(pacing.recommended(goal, self.settings_obj.get("battle.cards_per_round", 2)))
+        except Exception:
+            pass
+        for k, v in values.items():
+            self.settings_obj.set(k, v)
+            try:                                # keep an open Settings window in step
+                w = mw.settings_ankimon.input_widgets.get(k)
+                if w is not None and hasattr(w, "setText"):
+                    w.setText(str(v))
+            except Exception:
+                pass
 
     def get_starters_of_gen(self):
         try:
@@ -219,7 +291,7 @@ class StarterWindow(QWidget):
         self.setMaximumHeight(340)
         self.show()
         self.starter = True
-        self.logger.log_and_showinfo("info","You have chosen your Starter Pokemon ! \n You can now close this window ! \n Please restart your Anki to restart your Pokemon Journey!")
+        self.logger.log("info", "Starter chosen")
         #global achievments
         #check = check_for_badge(achievements, 7)
         #if check is False:
@@ -322,16 +394,18 @@ class StarterWindow(QWidget):
 
         # custom font
         custom_font = load_custom_font(28, int(self.settings_obj.get("misc.language")))
-        message_box_text = "Choose your Starter Pokémon"
-        # Draw the text on top of the image
-        # Adjust the font size as needed
+        message_box_text = "%s - choose your Starter" % self.region_name()
+        # Draw the text on top of the image, centred
+        width = pixmap_bckg.width() or 512
         painter.setFont(custom_font)
         painter.setPen(QColor(255,255,255))  # Text color
-        painter.drawText(110, 310, message_box_text)
+        painter.drawText(max(5, (width - painter.fontMetrics().horizontalAdvance(message_box_text)) // 2),
+                         310, message_box_text)
         custom_font = load_custom_font(20, int(self.settings_obj.get("misc.language")))
         painter.setFont(custom_font)
-        next_gen = (self.current_gen + 1) % total_generations + 1
-        painter.drawText(10, 330, f"Press G for Gen {next_gen}")
+        hint = "G: %s    Shift+G: %s" % (self.region_name(self.current_gen + 1),
+                                          self.region_name(self.current_gen - 1))
+        painter.drawText(max(5, (width - painter.fontMetrics().horizontalAdvance(hint)) // 2), 330, hint)
         painter.end()
         # Set the merged image as the pixmap for the QLabel
         starter_label = QLabel()

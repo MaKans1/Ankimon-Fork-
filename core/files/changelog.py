@@ -14,14 +14,14 @@ from .pyobj.help_window import HelpWindow
 update_infos_md = addon_dir / "updateinfos.md"
 
 
+# Ankimon 2.0: news comes from this project's repo. It's shown once whenever
+# it differs from the local updateinfos.md (i.e. when new notes are published).
+NEWS_URL = "https://raw.githubusercontent.com/MaKans1/Ankimon-Fork-/main/core/files/updateinfos.md"
+
+
 def download_changelog():
     try:
-        github_url = f"https://raw.githubusercontent.com/h0tp-ftw/ankimon/refs/heads/main/assets/changelogs/{addon_ver}.md"
-        github_content = read_github_file(github_url)
-        if github_content is None:
-            github_url = "https://raw.githubusercontent.com/h0tp-ftw/ankimon/refs/heads/main/assets/changelogs/unknown.md"
-            github_content = read_github_file(github_url)
-        return github_content
+        return read_github_file(NEWS_URL)
     except Exception as e:
         return e
 
@@ -31,14 +31,8 @@ def check_and_show_changelog(online_connectivity: bool, ssh: bool, no_more_news:
         return
 
     def done(result: Union[Exception, str, None]):
-        if isinstance(result, Exception):
-            show_warning_with_traceback(
-                parent=mw, exception=result, message="Error connecting to GitHub:"
-            )
-            return
-        if result is None:
-            showWarning("Failed to retrieve Ankimon content from GitHub.")
-            return
+        if isinstance(result, Exception) or result is None:
+            return          # offline or not reachable: no news, no warning
         local_content = read_local_file(update_infos_md)
         if not compare_files(local_content, result):
             write_local_file(update_infos_md, result)

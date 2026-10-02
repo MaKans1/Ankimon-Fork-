@@ -36,9 +36,16 @@ showdown needs gyms.
 ### Updates
 Anki won't offer to "update" back to the official 2.03 on AnkiWeb, because 2.0 counts as newer. If Ankimon's authors later publish a newer version on AnkiWeb, Anki will offer it, and accepting would replace 2.0 (your save is kept).
 
+## First start
+New players get a short setup:
+1. Choose your region (G / Shift+G to browse) and its starter.
+2. Enter your daily card goal.
+
+Then the game begins, with no extra restart. Existing players keep their save, region and Pokémon.
+
 ## Set your daily goal first
 
-Settings > Study > **Goal of Daily Average Cards**. The gym intervals and EXP are tuned so clearing every gym and expedition takes about four months at your goal, whether that's 100 cards a day or 1,000. Change the goal and the recommended values are filled in for you; each setting shows "For your goal of N cards a day, recommended: X". You can still adjust them.
+New players set it during the first-start setup; existing players: Settings > Study > **Goal of Daily Average Cards**. The gym intervals and EXP are tuned so clearing every gym and expedition takes about four months at your goal, whether that's 100 cards a day or 1,000. Change the goal and the recommended values are filled in for you; each setting shows "For your goal of N cards a day, recommended: X". You can still adjust them.
 
 ## What's in each part
 

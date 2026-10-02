@@ -45,6 +45,13 @@ Bug fixes and quality-of-life changes on top of Ankimon 2.03. The core is always
 - Move buttons and hover cards show type, category, power, accuracy and PP.
 - Pop-up messages stack instead of drawing on top of each other.
 
+## New players
+- **First start is a short setup:**
+  - choose your region (G / Shift+G or the arrow keys to browse) and one of its three starters;
+  - then enter your daily card goal, which sets gym pacing and EXP to match.
+  - You start in the region you picked, and the game begins right away, with no Anki restart after choosing.
+- **What's new:** notes now come from this project, so the confusing "Ankimon Experimental - Version UNKNOWN" popup is gone. Nothing is shown when you're offline.
+
 ## Fixes
 - **Monthly gift Pokémon** now arrives even if you don't own last month's. Before, the check for last month's Pokémon crashed and nothing was awarded, every time Anki started.
 
