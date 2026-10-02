@@ -1,5 +1,10 @@
 # Ankimon 2.0
 
+## ⬇ [Download Ankimon 2.0](https://github.com/MaKans1/Ankimon-Fork-/releases/latest/download/Ankimon-2.0.ankiaddon)
+
+**New to Ankimon?** Click the link above, then double-click the downloaded file. Anki installs everything, then restart Anki.
+**Already have Ankimon?** Same file. Your Pokémon, items and progress are kept.
+
 A fan-made overhaul of [Ankimon](https://ankiweb.net/shared/info/1908235722), the Anki add-on that turns your reviews into a Pokémon adventure. Ankimon 2.0 adds gym ladders in all nine regions, travel between regions, smarter wild battles, legendary expeditions, and a progression curve built to last months at your own daily card goal.
 
 It's split into a **core** (general patches: fixes and quality-of-life changes) and three optional **packages** for the big systems, so you can install only what you want. Each one has a README and a CHANGELOG:
@@ -14,7 +19,7 @@ It's split into a **core** (general patches: fixes and quality-of-life changes) 
 
 ## Install
 
-1. Download **Ankimon-2.0.ankiaddon** from the [Releases](../../releases) page.
+1. Download **[Ankimon-2.0.ankiaddon](https://github.com/MaKans1/Ankimon-Fork-/releases/latest/download/Ankimon-2.0.ankiaddon)** (or from the [Releases](../../releases) page).
 2. Double-click it, or in Anki use Tools > Add-ons > Install from file. If you already have Ankimon, Anki asks to replace it. Your Pokémon, items and progress are kept.
 3. Restart Anki.
 
