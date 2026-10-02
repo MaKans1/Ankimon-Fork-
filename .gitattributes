@@ -1,0 +1,3 @@
+# Store every file exactly as built (no line-ending conversion), so a clone
+# reproduces the tested add-on byte for byte.
+* -text

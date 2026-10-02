@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PokéDex</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      background:
+        repeating-linear-gradient(0deg, transparent, transparent 19px, #16B9F6 20px),
+        repeating-linear-gradient(90deg, transparent, transparent 19px, #16B9F6 20px),
+        linear-gradient(to bottom, #25E6F9, #16B9F6, #068CF2);
+      color: #1A7A85;
+      display: flex;
+      flex-direction: column;
+      transition: background 0.3s ease;
+    }
+
+    body.dark-mode {
+      background:
+        repeating-linear-gradient(0deg, transparent, transparent 19px, #04929F 20px),
+        repeating-linear-gradient(90deg, transparent, transparent 19px, #04929F 20px),
+        linear-gradient(to bottom, #1a98a4d5, #06759D, #045C9F);
+      color: white;
+    }
+
+    .pokedex-container {
+      width: calc(100% - 20px);
+      height: calc(100% - 20px);
+      margin: 10px;
+      padding: 10px;
+      box-sizing: border-box;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 15px;
+      overflow: hidden;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    .header span {
+      color: #032c43;
+    }
+
+    body.dark-mode .header span {
+      color: white;
+    }
+
+    .header div {
+      display: flex;
+      gap: 10px;
+    }
+
+    .theme-toggle {
+      background: #05699E;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      font-family: 'Courier New', Courier, monospace;
+      transition: background 0.2s ease;
+    }
+
+    .theme-toggle:hover {
+      background: #045C9F;
+    }
+
+    body.dark-mode .theme-toggle {
+      background: #04929F;
+    }
+
+    body.dark-mode .theme-toggle:hover {
+      background: #067cbc;
+    }
+
+    .Pokémon-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      justify-items: center;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 20px;
+      border-radius: 10px;
+      overflow: hidden;
+      flex: 1;
+    }
+
+    .Pokémon-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow: visible;
+      position: relative;
+    }
+
+    .Pokémon-item img {
+      width: 85px;
+      height: 85px;
+      image-rendering: pixelated;
+      transition: all 0.3s ease;
+      overflow: visible;
+      object-fit: contain;
+    }
+    
+    .Pokémon-item img[src*=".gif"] {
+      max-width: 80px;
+      max-height: 80px;
+      width: auto;
+      height: auto;
+    }
+    
+    .Pokémon-sprite-container img {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 70px;
+      height: 70px;
+      image-rendering: pixelated;
+      transition: opacity 0.8s ease;
+      object-fit: contain;
+    }
+    
+    .Pokémon-sprite-container img[src*=".gif"] {
+      max-width: 70px;
+      max-height: 70px;
+      width: auto;
+      height: auto;
+    }
+
+    .Pokémon-item img:hover {
+      transform: scale(1.2);
+      filter: drop-shadow(0 0 8px #ffffff) drop-shadow(0 0 16px #bef8ffe1);
+      background: radial-gradient(circle, rgba(0,229,255,0.4) 0%, rgba(0,229,255,0) 70%);
+      border-radius: 50%;
+    }
+
+    .Pokémon-sprite-container {
+      position: relative;
+      width: 70px;
+      height: 70px;
+    }
+
+    .Pokémon-sprite-container img {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 70px;
+      height: 70px;
+      image-rendering: pixelated;
+      transition: opacity 0.8s ease;
+    }
+
+    .Pokémon-sprite-container img.grayscale-hidden {
+      opacity: 0;
+      filter: grayscale(100%);
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .Pokémon-sprite-container img.base {
+      opacity: 1;
+      z-index: 1;
+    }
+
+    .Pokémon-sprite-container:hover img.grayscale-hidden {
+      opacity: 1;
+    }
+
+    .Pokémon-sprite-container:hover img.base {
+      opacity: 0;
+    }
+
+    .Pokémon-item .Pokémon-id {
+      font-size: 12px;
+      margin-top: 5px;
+    }
+
+    .navigation {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 20px 0;
+      font-size: 16px;
+    }
+
+    .pagination {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+
+    .pagination button {
+      background-color: #05699E;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      font-family: 'Courier New', Courier, monospace;
+      transition: background-color 0.2s ease;
+    }
+
+    .pagination button:hover:not(:disabled) {
+      background-color: #045C9F;
+    }
+
+    .pagination button:disabled {
+      cursor: not-allowed;
+    }
+
+    .pagination button.active {
+      background-color: #067cbc;
+      font-weight: bold;
+      transition: background-color 0.2s ease;
+    }
+
+    body.dark-mode .pagination button {
+      background: #04929F;
+    }
+
+    body.dark-mode .pagination button:hover:not(:disabled) {
+      background: #067cbc;
+    }
+
+    body.dark-mode .pagination button.active {
+      background: #067cbc;
+    }
+
+    body.dark-mode .pagination button:disabled {
+      background: #666666;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 16px;
+      margin-top: 20px;
+    }
+
+    .footer button {
+      background: #05699E;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      margin: 0 5px;
+    }
+
+    .footer button.active {
+      background: #067cbc;
+    }
+
+    body.dark-mode .footer button {
+      background: #05699E;
+      color: white;
+    }
+
+    body.dark-mode .footer button.active {
+      background: #067cbc;
+      color: white;
+    }
+    .regions { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin: 6px 0 2px 0; }
+    .regions button { background: #05699E; color: white; border: none; padding: 3px 8px;
+      border-radius: 5px; cursor: pointer; font-family: inherit; font-size: 13px; }
+    .regions button.active { background: #0a3d62; box-shadow: inset 0 0 0 2px #ffd166; }
+    .region-progress { text-align: center; font-weight: bold; font-size: 15px; margin: 2px 0 4px 0; }
+    .region-progress .pct { cursor: help; }
+    .region-progress .tease { color: transparent; }
+    .region-progress .tease::selection { color: #c0392b; background: #ffe066; }
+    .region-progress .star { color: #f4b400; }
+  </style>
+</head>
+<body>
+  <div class="pokedex-container">
+    <div class="header">
+      <span id="obtained-count">Pokémon Obtained: 0</span>
+      <div>
+        <button id="shiny-toggle" class="theme-toggle">Normal</button>
+        <button id="gif-toggle" class="theme-toggle">GIF Off</button>
+        <button id="theme-toggle" class="theme-toggle">Dark</button>
+      </div>
+      <span id="seen-count">Pokémon Seen: 0</span>
+    </div>
+
+    <div class="regions" id="regions"></div>
+    <div class="region-progress" id="region-progress"></div>
+    <div class="navigation">
+      <div class="pagination" id="pagination"></div>
+    </div>
+
+    <div class="Pokémon-grid" id="Pokémon-grid"></div>
+
+    <div class="footer">
+      <button id="filter-all" class="active">All</button>
+      <button id="filter-caught">Caught</button>
+      <button id="filter-not-caught">Not Caught</button>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", async function () {
+      const totalPokemon = 1025;
+      const pokemonGrid = document.getElementById("Pokémon-grid");
+      const obtainedCount = document.getElementById("obtained-count");
+      const seenCount = document.getElementById("seen-count");
+      const paginationContainer = document.getElementById("pagination");
+      const filterAllBtn = document.getElementById("filter-all");
+      const filterCaughtBtn = document.getElementById("filter-caught");
+      const filterNotCaughtBtn = document.getElementById("filter-not-caught");
+      const themeToggleBtn = document.getElementById("theme-toggle");
+      const gifToggleBtn = document.getElementById("gif-toggle");
+      const shinyToggleBtn = document.getElementById("shiny-toggle");
+
+      let pokemonNames = {};
+      try {
+        const response = await fetch("./pokemon_names.json");
+        pokemonNames = await response.json();
+      } catch (error) {
+        console.log("Could not load Pokémon names:", error);
+      }
+
+      let isDarkMode = false;
+      themeToggleBtn.addEventListener("click", () => {
+        isDarkMode = !isDarkMode;
+        document.body.classList.toggle("dark-mode", isDarkMode);
+        themeToggleBtn.textContent = isDarkMode ? "Light" : "Dark";
+      });
+
+      let useGif = false;
+      gifToggleBtn.addEventListener("click", () => {
+        useGif = !useGif;
+        gifToggleBtn.textContent = useGif ? "GIF On" : "GIF Off";
+        displayPokemon();
+      });
+
+      let useShiny = false;
+      shinyToggleBtn.addEventListener("click", () => {
+        useShiny = !useShiny;
+        shinyToggleBtn.textContent = useShiny ? "Shiny" : "Normal";
+        updateCounts();
+        displayPokemon();
+      });
+
+      function getNumbersFromURL() {
+        const params = new URLSearchParams(window.location.search);
+        const numbersParam = params.get("numbers");
+        if (numbersParam && numbersParam.trim() !== "") {
+          return numbersParam.split(',')
+            .map(num => parseInt(num.trim(), 10))
+            .filter(num => !isNaN(num));
+        }
+        return [];
+      }
+
+      function getDefeatedCountFromURL() {
+        const params = new URLSearchParams(window.location.search);
+        const defeatedParam = params.get("defeated");
+        const defeatedCount = parseInt(defeatedParam, 10);
+        return isNaN(defeatedCount) ? 0 : Math.max(0, defeatedCount);
+      }
+
+      function getReleasedCountFromURL() {
+        const params = new URLSearchParams(window.location.search);
+        const releasedParam = params.get("released");
+        const releasedCount = parseInt(releasedParam, 10);
+        return isNaN(releasedCount) ? 0 : Math.max(0, releasedCount);
+      }
+
+      function getCaughtTotalFromURL() {
+        const params = new URLSearchParams(window.location.search);
+        const caughtTotalParam = params.get("caught_total");
+        const caughtTotal = parseInt(caughtTotalParam, 10);
+        return isNaN(caughtTotal) ? 0 : Math.max(0, caughtTotal);
+      }
+
+      function getShinyNumbersFromURL() {
+        const params = new URLSearchParams(window.location.search);
+        const shiniesParam = params.get("shinies");
+        if (shiniesParam && shiniesParam.trim() !== "") {
+          return shiniesParam.split(',')
+            .map(num => parseInt(num.trim(), 10))
+            .filter(num => !isNaN(num));
+        }
+        return [];
+      }
+
+      const givenNumbers = getNumbersFromURL();
+      const givenShinyNumbers = getShinyNumbersFromURL();
+      const allNumbers = Array.from({ length: totalPokemon }, (_, i) => i + 1);
+      const caughtNumbers = allNumbers.filter(number => givenNumbers.includes(number));
+      const shinyNumbers = allNumbers.filter(number => givenShinyNumbers.includes(number));
+      const defeatedCount = getDefeatedCountFromURL();
+      const releasedCount = getReleasedCountFromURL();
+      const caughtCount = caughtNumbers.length; // Unique IDs (for display)
+      const caughtTotal = getCaughtTotalFromURL(); // Total instances (for "Seen" calculation)
+      // Seen = Obtained instances (current) + Released instances (were obtained before) + Defeated (Pokémon defeated by our Pokémon)
+      // Use caughtTotal (instances) instead of caughtCount (unique IDs) to handle multiple instances of same Pokémon
+      const seenTotal = caughtTotal + releasedCount + defeatedCount;
+      
+      const shinyCount = shinyNumbers.length;
+
+      // --- regions ------------------------------------------------------
+      // "Caught" means registered: owned at some point (evolving keeps it).
+      // A region reads 100% once everything but its mythicals is registered.
+      const qs = new URLSearchParams(window.location.search);
+      const REGIONS = [["All", 1, 1025], ["Kanto", 1, 151], ["Johto", 152, 251], ["Hoenn", 252, 386],
+        ["Sinnoh", 387, 493], ["Unova", 494, 649], ["Kalos", 650, 721], ["Alola", 722, 809],
+        ["Galar", 810, 905], ["Paldea", 906, 1025]];
+      const mythicals = (qs.get("mythicals") || "").split(",").map(n => parseInt(n, 10)).filter(n => !isNaN(n));
+      let currentRegion = parseInt(qs.get("region") || "0", 10);
+      if (!(currentRegion >= 0 && currentRegion < REGIONS.length)) currentRegion = 0;
+      const regionsBar = document.getElementById("regions");
+      const regionProgress = document.getElementById("region-progress");
+      function regionNumbers() {
+        const [, lo, hi] = REGIONS[currentRegion];
+        return allNumbers.filter(n => n >= lo && n <= hi);
+      }
+      function renderRegionProgress() {
+        const pool = regionNumbers();
+        const core = pool.filter(n => !mythicals.includes(n));
+        const myth = pool.filter(n => mythicals.includes(n));
+        const have = core.filter(n => caughtNumbers.includes(n)).length;
+        const mhave = myth.filter(n => caughtNumbers.includes(n)).length;
+        const name = currentRegion === 0 ? "National Dex" : REGIONS[currentRegion][0];
+        let pct;
+        if (core.length && have >= core.length) {
+          pct = mhave >= myth.length
+            ? '100% <span class="star">&#9733;</span>'
+            : '<span class="pct" title="Or maybe not?">100%<span class="tease"> Or maybe not?</span></span>';
+        } else {
+          pct = Math.floor(100 * have / Math.max(1, core.length)) + "%";
+        }
+        regionProgress.innerHTML = `${name}: ${have} / ${core.length} registered &nbsp;&middot;&nbsp; ${pct}`;
+      }
+      REGIONS.forEach(([name], idx) => {
+        const b = document.createElement("button");
+        b.textContent = name;
+        b.classList.toggle("active", idx === currentRegion);
+        b.addEventListener("click", () => {
+          currentRegion = idx;
+          currentPage = 0;
+          regionsBar.querySelectorAll("button").forEach((x, j) => x.classList.toggle("active", j === idx));
+          renderRegionProgress();
+          displayPokemon();
+        });
+        regionsBar.appendChild(b);
+      });
+
+      function updateCounts() {
+        if (useShiny) {
+          obtainedCount.textContent = `Shiny Obtained: ${shinyCount}`;
+          // For shiny, "Seen" = "Obtained" since we don't track defeated shiny separately
+          // (you can only "see" a shiny if you've caught it)
+          seenCount.textContent = `Pokémon Seen: ${seenTotal}`;
+        } else {
+          obtainedCount.textContent = `Pokémon Obtained: ${caughtCount}`;
+          seenCount.textContent = `Pokémon Seen: ${seenTotal}`;
+        }
+      }
+      updateCounts();
+
+      let currentPage = 0;
+      const itemsPerPage = 25;
+      let currentFilter = "all";
+
+      function updateActiveButton() {
+        filterAllBtn.classList.toggle("active", currentFilter === "all");
+        filterCaughtBtn.classList.toggle("active", currentFilter === "caught");
+        filterNotCaughtBtn.classList.toggle("active", currentFilter === "not-caught");
+      }
+
+      function getTotalItems() {
+        const pool = regionNumbers();
+        const owned = useShiny ? shinyNumbers : caughtNumbers;
+        const have = pool.filter(n => owned.includes(n)).length;
+        return currentFilter === "all" ? pool.length :
+               currentFilter === "caught" ? have : pool.length - have;
+      }
+
+      function updatePagination() {
+        const totalItems = getTotalItems();
+        const totalPages = Math.ceil(totalItems / itemsPerPage);
+        paginationContainer.innerHTML = '';
+
+        // Add Previous button
+        const prevBtn = document.createElement("button");
+        prevBtn.textContent = "← Prev";
+        prevBtn.disabled = currentPage === 0;
+        prevBtn.addEventListener("click", () => {
+          if (currentPage > 0) {
+            currentPage--;
+            displayPokemon();
+          }
+        });
+        paginationContainer.appendChild(prevBtn);
+
+        // Add numbered page buttons (show up to 5 pages)
+        const maxButtons = 5;
+        const half = Math.floor(maxButtons / 2);
+        let startPage = Math.max(0, currentPage - half);
+        let endPage = Math.min(totalPages, startPage + maxButtons);
+
+        if (endPage - startPage < maxButtons && startPage > 0) {
+          startPage = Math.max(0, endPage - maxButtons);
+        }
+
+        for (let i = startPage; i < endPage; i++) {
+          const pageBtn = document.createElement("button");
+          pageBtn.textContent = i + 1;
+          pageBtn.classList.toggle("active", i === currentPage);
+          pageBtn.addEventListener("click", () => {
+            currentPage = i;
+            displayPokemon();
+          });
+          paginationContainer.appendChild(pageBtn);
+        }
+
+        // Add Next button
+        const nextBtn = document.createElement("button");
+        nextBtn.textContent = "Next →";
+        nextBtn.disabled = (currentPage + 1) * itemsPerPage >= totalItems;
+        nextBtn.addEventListener("click", () => {
+          if ((currentPage + 1) * itemsPerPage < totalItems) {
+            currentPage++;
+            displayPokemon();
+          }
+        });
+        paginationContainer.appendChild(nextBtn);
+      }
+
+      function displayPokemon() {
+        pokemonGrid.innerHTML = "";
+        let displayNumbers;
+        
+        // In shiny mode, show all Pokémon but use shiny sprites
+        // In normal mode, show all Pokémon with normal sprites
+        if (currentFilter === "caught") {
+          displayNumbers = useShiny ? shinyNumbers : caughtNumbers;
+        } else if (currentFilter === "not-caught") {
+          displayNumbers = useShiny 
+            ? allNumbers.filter(number => !shinyNumbers.includes(number))
+            : allNumbers.filter(number => !caughtNumbers.includes(number));
+        } else {
+          displayNumbers = allNumbers; // Show all Pokémon
+        }
+
+        const startIndex = currentPage * itemsPerPage;
+        const endIndex = Math.min(startIndex + itemsPerPage, displayNumbers.length);
+        const pageNumbers = displayNumbers.slice(startIndex, endIndex);
+
+        for (let i of pageNumbers) {
+          const pokemonItem = document.createElement("div");
+          pokemonItem.className = "Pokémon-item";
+
+          const formattedId = i.toString().padStart(3, '0');
+          const spriteFolder = useGif ? "front_default_gif" : "front_default";
+          // In shiny mode, always use shiny sprites; in normal mode, use normal sprites
+          const shinyPath = useShiny ? "shiny/" : "";
+          const spritePath = `../user_files/sprites/${spriteFolder}/${shinyPath}${i}.${useGif ? 'gif' : 'png'}`;
+          const placeholderPath = `../user_files/sprites/front_default/0.png`;
+          const placeholderShinyPath = useShiny ? `../user_files/sprites/front_default/shiny/0.png` : placeholderPath;
+
+          // Check if Pokémon is owned: in shiny mode check shinyNumbers, in normal mode check caughtNumbers
+          const isOwned = useShiny ? shinyNumbers.includes(i) : caughtNumbers.includes(i);
+          
+          if (isOwned) {
+            const img = document.createElement("img");
+            img.src = spritePath;
+            img.loading = "lazy"; // Enable lazy loading
+            img.onerror = function() {
+              console.error(`Failed to load sprite: ${spritePath}`);
+              // Fallback to normal sprite if shiny doesn't exist
+              if (useShiny) {
+                const normalPath = `../user_files/sprites/${spriteFolder}/${i}.${useGif ? 'gif' : 'png'}`;
+                this.src = normalPath;
+                this.onerror = function() {
+                  this.src = placeholderPath;
+                };
+              } else {
+                this.src = placeholderPath;
+              }
+            };
+            pokemonItem.appendChild(img);
+          } else {
+            const spriteContainer = document.createElement("div");
+            spriteContainer.className = "Pokémon-sprite-container";
+
+            const baseImg = document.createElement("img");
+            baseImg.src = placeholderShinyPath;
+            baseImg.classList.add("base");
+            baseImg.loading = "lazy"; // Enable lazy loading
+            baseImg.onerror = function() {
+              this.src = placeholderPath;
+            };
+
+            const hoverImg = document.createElement("img");
+            hoverImg.src = spritePath;
+            hoverImg.classList.add("grayscale-hidden");
+            hoverImg.loading = "lazy"; // Enable lazy loading
+            hoverImg.onerror = function() {
+              console.error(`Failed to load sprite: ${spritePath}`);
+              // Fallback to normal sprite if shiny doesn't exist
+              if (useShiny) {
+                const normalPath = `../user_files/sprites/${spriteFolder}/${i}.${useGif ? 'gif' : 'png'}`;
+                this.src = normalPath;
+                this.onerror = function() {
+                  this.src = placeholderPath;
+                };
+              } else {
+                this.src = placeholderPath;
+              }
+            };
+
+            spriteContainer.appendChild(baseImg);
+            spriteContainer.appendChild(hoverImg);
+            pokemonItem.appendChild(spriteContainer);
+          }
+
+          const idSpan = document.createElement("span");
+          idSpan.className = "Pokémon-id";
+          idSpan.textContent = isOwned ?
+            (pokemonNames[i] || `Unknown #${formattedId}`) :
+            `#${formattedId}`;
+
+          pokemonItem.appendChild(idSpan);
+          pokemonGrid.appendChild(pokemonItem);
+        }
+
+        updatePagination();
+      }
+
+      filterAllBtn.addEventListener("click", () => {
+        currentFilter = "all";
+        currentPage = 0;
+        updateActiveButton();
+        displayPokemon();
+      });
+
+      filterCaughtBtn.addEventListener("click", () => {
+        currentFilter = "caught";
+        currentPage = 0;
+        updateActiveButton();
+        displayPokemon();
+      });
+
+      filterNotCaughtBtn.addEventListener("click", () => {
+        currentFilter = "not-caught";
+        currentPage = 0;
+        updateActiveButton();
+        displayPokemon();
+      });
+
+      updateActiveButton();
+      renderRegionProgress();
+      displayPokemon();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,345 @@
+{
+ "armorcannon": {
+  "basePower": 130
+ },
+ "axekick": {
+  "secondary_chance": 45
+ },
+ "babydolleyes": {
+  "boosts": {
+   "attack": -2
+  }
+ },
+ "barbbarrage": {
+  "secondary_chance": 75
+ },
+ "bounce": {
+  "basePower": 100
+ },
+ "bravebird": {
+  "recoil": [
+   1,
+   4
+  ]
+ },
+ "captivate": {
+  "boosts": {
+   "special-attack": -3
+  }
+ },
+ "charm": {
+  "boosts": {
+   "attack": -3
+  }
+ },
+ "clangingscales": {
+  "basePower": 120
+ },
+ "closecombat": {
+  "basePower": 130
+ },
+ "confusion": {
+  "secondary_chance": 15
+ },
+ "cottonspore": {
+  "boosts": {
+   "speed": -3
+  }
+ },
+ "crosspoison": {
+  "secondary_chance": 15
+ },
+ "defog": {
+  "boosts": {
+   "evasion": -3
+  }
+ },
+ "dig": {
+  "basePower": 90
+ },
+ "dive": {
+  "basePower": 90
+ },
+ "dizzypunch": {
+  "secondary_chance": 30
+ },
+ "doubleedge": {
+  "recoil": [
+   1,
+   4
+  ]
+ },
+ "dracometeor": {
+  "self_boosts": {
+   "special-attack": -1
+  }
+ },
+ "dragonascent": {
+  "basePower": 130
+ },
+ "electroshot": {
+  "basePower": 150
+ },
+ "flareblitz": {
+  "recoil": [
+   1,
+   4
+  ]
+ },
+ "flash": {
+  "boosts": {
+   "accuracy": -2
+  }
+ },
+ "fleurcannon": {
+  "self_boosts": {
+   "special-attack": -1
+  }
+ },
+ "fly": {
+  "basePower": 105
+ },
+ "freezeshock": {
+  "basePower": 160
+ },
+ "grasswhistle": {
+  "accuracy": 70
+ },
+ "growl": {
+  "boosts": {
+   "attack": -2
+  }
+ },
+ "gunkshot": {
+  "secondary_chance": 45
+ },
+ "hammerarm": {
+  "basePower": 110
+ },
+ "headcharge": {
+  "recoil": [
+   1,
+   5
+  ]
+ },
+ "headlongrush": {
+  "basePower": 130
+ },
+ "headsmash": {
+  "recoil": [
+   1,
+   3
+  ]
+ },
+ "hurricane": {
+  "secondary_chance": 45
+ },
+ "hyperspacefury": {
+  "basePower": 110
+ },
+ "iceburn": {
+  "basePower": 160
+ },
+ "icehammer": {
+  "basePower": 110
+ },
+ "leafstorm": {
+  "self_boosts": {
+   "special-attack": -1
+  }
+ },
+ "leer": {
+  "boosts": {
+   "defense": -2
+  }
+ },
+ "lightofruin": {
+  "recoil": [
+   1,
+   3
+  ]
+ },
+ "makeitrain": {
+  "basePower": 130
+ },
+ "memento": {
+  "boosts": {
+   "attack": -3,
+   "special-attack": -3
+  }
+ },
+ "meteorbeam": {
+  "basePower": 140
+ },
+ "nobleroar": {
+  "boosts": {
+   "attack": -2,
+   "special-attack": -2
+  }
+ },
+ "overheat": {
+  "self_boosts": {
+   "special-attack": -1
+  }
+ },
+ "phantomforce": {
+  "basePower": 105
+ },
+ "playnice": {
+  "boosts": {
+   "attack": -2
+  }
+ },
+ "poisonjab": {
+  "secondary_chance": 45
+ },
+ "poisonpowder": {
+  "accuracy": 90
+ },
+ "poisonsting": {
+  "secondary_chance": 45
+ },
+ "poisontail": {
+  "secondary_chance": 15
+ },
+ "psybeam": {
+  "secondary_chance": 15
+ },
+ "psychoboost": {
+  "self_boosts": {
+   "special-attack": -1
+  }
+ },
+ "razorwind": {
+  "basePower": 90
+ },
+ "rockclimb": {
+  "secondary_chance": 30
+ },
+ "sandattack": {
+  "boosts": {
+   "accuracy": -3
+  }
+ },
+ "shadowforce": {
+  "basePower": 140
+ },
+ "shellsidearm": {
+  "secondary_chance": 30
+ },
+ "signalbeam": {
+  "secondary_chance": 15
+ },
+ "skullbash": {
+  "basePower": 150
+ },
+ "skyattack": {
+  "basePower": 160
+ },
+ "skydrop": {
+  "basePower": 70
+ },
+ "sludge": {
+  "secondary_chance": 45
+ },
+ "sludgebomb": {
+  "secondary_chance": 45
+ },
+ "sludgewave": {
+  "secondary_chance": 15
+ },
+ "smog": {
+  "secondary_chance": 60
+ },
+ "solarbeam": {
+  "basePower": 140
+ },
+ "solarblade": {
+  "basePower": 145
+ },
+ "spinout": {
+  "self_boosts": {
+   "speed": -1
+  }
+ },
+ "strangesteam": {
+  "secondary_chance": 30
+ },
+ "submission": {
+  "recoil": [
+   1,
+   5
+  ]
+ },
+ "superpower": {
+  "basePower": 130
+ },
+ "supersonic": {
+  "accuracy": 85
+ },
+ "swagger": {
+  "accuracy": 100
+ },
+ "sweetscent": {
+  "boosts": {
+   "evasion": -3
+  }
+ },
+ "takedown": {
+  "recoil": [
+   1,
+   5
+  ]
+ },
+ "tearfullook": {
+  "boosts": {
+   "attack": -2,
+   "special-attack": -2
+  }
+ },
+ "thunderwave": {
+  "accuracy": 100
+ },
+ "tickle": {
+  "boosts": {
+   "attack": -2,
+   "defense": -2
+  }
+ },
+ "toxic": {
+  "accuracy": 100
+ },
+ "twineedle": {
+  "secondary_chance": 30
+ },
+ "vcreate": {
+  "basePower": 190
+ },
+ "volttackle": {
+  "recoil": [
+   1,
+   4
+  ]
+ },
+ "waterpulse": {
+  "secondary_chance": 30
+ },
+ "wavecrash": {
+  "recoil": [
+   1,
+   4
+  ]
+ },
+ "wildcharge": {
+  "recoil": [
+   1,
+   5
+  ]
+ },
+ "woodhammer": {
+  "recoil": [
+   1,
+   4
+  ]
+ }
+}

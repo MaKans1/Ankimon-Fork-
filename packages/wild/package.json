@@ -1,0 +1,7 @@
+{
+  "name": "wild",
+  "version": "2.0.0",
+  "summary": "Smarter wild battles, badge-based wild levels, team rotation, travel between regions, a registered Pokédex.",
+  "requires": [],
+  "works_better_with": ["gyms"]
+}

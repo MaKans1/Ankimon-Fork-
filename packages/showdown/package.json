@@ -1,0 +1,7 @@
+{
+  "name": "showdown",
+  "version": "2.0.0",
+  "summary": "Gym and expedition battles use Pokémon Showdown's simulator: the real games' battle rules.",
+  "requires": ["gyms"],
+  "works_better_with": []
+}

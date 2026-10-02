@@ -1,0 +1,363 @@
+from aqt import gui_hooks, mw, utils
+from aqt.utils import showInfo
+from ..functions.pokemon_functions import find_experience_for_level
+from ..business import get_image_as_base64
+from ..functions.create_css_for_reviewer import create_css_for_reviewer
+import json
+import os
+from ..functions.create_gui_functions import create_status_html
+from ..functions.pokedex_functions import get_pokemon_diff_lang_name
+
+from .pokemon_obj import PokemonObject
+
+class Reviewer_Manager:
+    def __init__(self, settings_obj, main_pokemon, enemy_pokemon, ankimon_tracker):
+        self.settings = settings_obj
+        self.main_pokemon = main_pokemon
+        self.enemy_pokemon = enemy_pokemon
+        self.ankimon_tracker = ankimon_tracker
+        self.life_bar_injected = False
+        self.seconds = 0
+        self.myseconds = 0
+        self.hud_hidden = False 
+        self.hud_data = None    
+
+        # Register the functions for the hooks
+        gui_hooks.reviewer_will_end.append(self.reviewer_reset_life_bar_inject)
+        gui_hooks.reviewer_did_answer_card.append(self.update_life_bar)
+
+    def reviewer_reset_life_bar_inject(self):
+        self.life_bar_injected = False
+
+    def get_boost_values_string(self, pokemon: PokemonObject, display_neutral_boost: bool=False) -> str:
+        """Generates a formatted string representing the stat boost multipliers of a Pokémon."""
+        pokemon_dict = pokemon.to_engine_format()
+        boosts = {
+            "atk": pokemon_dict.get('attack_boost', 0),
+            "def": pokemon_dict.get('defense_boost', 0),
+            "SpA": pokemon_dict.get('special_attack_boost', 0),
+            "SpD": pokemon_dict.get('special_defense_boost', 0),
+            "SPE": pokemon_dict.get('speed_boost', 0),
+            "ACC": pokemon_dict.get('accuracy_boost', 0),
+            "EVD": pokemon_dict.get('evasion_boost', 0),
+        }
+
+        boost_to_mult = {
+            0: "x1", 1: "x1.5", 2: "x2", 3: "x2.5", 4: "x3", 5: "x3.5", 6: "x4",
+            -1: "x0.67", -2: "x0.5", -3: "x0.4", -4: "x0.33", -5: "x0.29", -6: "x0.25",
+        }
+
+        boost_display = " "
+        for key, boost_val in boosts.items():
+            if display_neutral_boost is False and boost_val == 0:
+                continue
+            mult_str = boost_to_mult[boost_val]
+            boost_display += f" | {key} {mult_str} | "
+
+        return boost_display
+
+    def inject_life_bar(self, web_content, context):
+        """This function is now a no-op. The HUD is injected via the Shadow DOM portal."""
+        return web_content
+
+    def update_life_bar(self, reviewer, card, ease):
+        if int(self.settings.get("gui.show_mainpkmn_in_reviewer")) == 3:
+            reviewer.web.eval("if(window.__ankimonHud) window.__ankimonHud.clear();")
+            return
+
+        # Check if the enemy pokemon is in the user's collection
+        is_pokemon_owned = False
+        try:
+            db = mw.ankimon_db
+            cursor = db.execute(
+                "SELECT 1 FROM captured_pokemon WHERE pokedex_id = ? LIMIT 1",
+                (self.enemy_pokemon.id,),
+            )
+            is_pokemon_owned = cursor.fetchone() is not None
+        except Exception:
+            pass
+
+        image_format = "gif" if self.settings.get('gui.reviewer_image_gif') else "png"
+        mime_type = f"image/{image_format}"
+
+        pokemon_image_file = self.enemy_pokemon.get_sprite_path("front", image_format)
+
+        main_pkmn_imagefile_path = None
+        side = "back" # Default side
+        if int(self.settings.get('gui.show_mainpkmn_in_reviewer')) > 0:
+            if image_format == "gif":
+                if self.settings.compute_special_variable('view_main_front') == -1:
+                    side = "front"
+                else:
+                    side = "back"
+            else: # png
+                side = "back"
+            main_pkmn_imagefile_path = self.main_pokemon.get_sprite_path(side, image_format)
+
+        if int(self.settings.get('gui.show_mainpkmn_in_reviewer')) > 0:
+            pokemon_hp_percent = int((self.enemy_pokemon.hp / self.enemy_pokemon.max_hp) * 50) if self.enemy_pokemon.max_hp > 0 else 0
+            mainpkmn_hp_percent = int((self.main_pokemon.hp / self.main_pokemon.max_hp) * 50) if self.main_pokemon.max_hp > 0 else 0
+            image_base64_mainpkmn = get_image_as_base64(main_pkmn_imagefile_path)
+        else:
+            pokemon_hp_percent = int((self.enemy_pokemon.hp / self.enemy_pokemon.max_hp) * 100) if self.enemy_pokemon.max_hp > 0 else 0
+            mainpkmn_hp_percent = 0 # Not used in this mode
+
+        enemy_hp_true_percent = (self.enemy_pokemon.hp / self.enemy_pokemon.max_hp) * 100 if self.enemy_pokemon.max_hp > 0 else 0
+        main_hp_true_percent = (self.main_pokemon.hp / self.main_pokemon.max_hp) * 100 if self.main_pokemon.max_hp > 0 else 0
+
+        image_base64 = get_image_as_base64(pokemon_image_file)
+
+        # Build hud_html
+        hud_html = '<div id="ankimon-hud">'
+        if self.settings.get("gui.hp_bar_config") is True:
+            hud_html += '<div id="life-bar" class="Ankimon"></div>'
+        if self.settings.get("gui.xp_bar_config") is True:
+            hud_html += '<div id="xp-bar" class="Ankimon"></div>'
+            hud_html += '<div id="xp_text" class="Ankimon">XP</div>'
+
+        enemy_lang_name = (get_pokemon_diff_lang_name(int(self.enemy_pokemon.id), int(self.settings.get('misc.language'))))
+        if self.enemy_pokemon.shiny is True:
+            enemy_lang_name += " ⭐ "
+        name_display_text = f"{enemy_lang_name} LvL: {self.enemy_pokemon.level}"
+        name_display_text += self.get_boost_values_string(self.enemy_pokemon, display_neutral_boost=False)
+        hud_html += f'<div id="name-display" class="Ankimon">{name_display_text}</div>'
+
+        try:
+            addon_package = mw.addonManager.addonFromModule(__name__)
+        except Exception:
+            addon_package = None
+
+        if not addon_package:
+            # Try fallback addon folder names
+            for name in ["1908235722", "Ankimon"]:
+                if os.path.exists(os.path.join(mw.addonManager.addonsFolder(), name)):
+                    addon_package = name
+                    break
+
+        if self.enemy_pokemon.hp > 0:
+            hud_html += create_status_html(f"{self.enemy_pokemon.battle_status}", self.settings, is_pokemon_owned, addon_package)
+        else:
+            hud_html += create_status_html("fainted", self.settings, is_pokemon_owned, addon_package)
+
+        hud_html += f'<div id="hp-display" class="Ankimon">HP: {int(self.enemy_pokemon.hp)}/{int(self.enemy_pokemon.max_hp)}</div>'
+
+
+        enemy_poke_animation_style = f"animation: ankimon-shake-normal {self.seconds}s ease;"
+        # Clickable: wild Pokemon info (wild/wild_menus.py)
+        _foe_click = ('style="%s pointer-events:auto; cursor:pointer;" '
+                      'onclick="pycmd(\'ankimon_wild:foe\')" title="Wild Pokemon info"'
+                      % enemy_poke_animation_style)
+        hud_html += f'<div id="PokeImage" class="Ankimon"><img src="data:{mime_type};base64,{image_base64}" alt="PokeImage" {_foe_click}></div>'
+
+        if int(self.settings.get('gui.show_mainpkmn_in_reviewer')) > 0:
+
+            my_poke_html_attributes = ""
+            # SPECIAL CASE: For front-facing GIFs, the animation conflicts with the transform.
+            # We will sacrifice the animation in this case to force the flip using a static class.
+            if image_format == "gif" and side == "front":
+                my_poke_html_attributes = 'class="force-flip" style="pointer-events:auto; cursor:pointer;"'
+            else:
+                # For all other cases, the flipped animation works correctly.
+                animation_style = f"animation: ankimon-shake-flipped {self.myseconds}s ease;"
+                my_poke_html_attributes = f'style="{animation_style} pointer-events:auto; cursor:pointer;"'
+            # Clickable: your Pokemon's wild menu (wild/wild_menus.py)
+            my_poke_html_attributes += ' onclick="pycmd(\'ankimon_wild:me\')" title="Your Pokemon"'
+
+            hud_html += (f'<div id="MyPokeImage" class="Ankimon">'
+                         f'<img src="data:{mime_type};base64,{image_base64_mainpkmn}" alt="MyPokeImage" {my_poke_html_attributes}>'
+                         f'</div>')
+
+            main_lang_name = (get_pokemon_diff_lang_name(int(self.main_pokemon.id), int(self.settings.get('misc.language'))))
+            if str(main_lang_name) == 'No translation in this language':
+                main_lang_name = 'RESTART ANKI NOW' 
+            if self.main_pokemon.shiny:
+                main_lang_name += " ⭐ "
+            # Region level cap: the buddy shows (and fights at) the cap until
+            # badges lift it; it keeps gaining EXP and levels underneath.
+            try:
+                from ..wild.wild_rules import shown_level_hp as _shown
+                _lv, _hp, _mhp = _shown(self.main_pokemon)
+            except Exception:
+                _lv, _hp, _mhp = self.main_pokemon.level, self.main_pokemon.hp, self.main_pokemon.max_hp
+            main_name_display_text = f"{main_lang_name} LvL: {_lv}"
+            main_name_display_text += self.get_boost_values_string(self.main_pokemon, display_neutral_boost=False)
+            hud_html += f'<div id="myname-display" class="Ankimon">{main_name_display_text}</div>'
+            hud_html += f'<div id="myhp-display" class="Ankimon">HP: {int(_hp)}/{int(_mhp)}</div>'
+            if self.settings.get("gui.hp_bar_config") is True:
+                hud_html += '<div id="mylife-bar" class="Ankimon"></div>'
+
+        # gym progress counter - last row of the HUD, so it renders below
+        # the XP bar and above Anki's button bar.
+        try:
+            from ..gym import gym_ui as _gym
+            _gym_line = _gym.progress_text()
+            if _gym_line:
+                # Sit level with the HP readouts, centred between them.
+                # Same offset formula as #myhp-display in
+                # create_css_for_reviewer, so it tracks the spacer settings.
+                try:
+                    _sp = int(self.settings.compute_special_variable('xp_bar_spacer'))
+                except Exception:
+                    _sp = 0
+                try:
+                    _th = int(self.settings.get("gui.review_hp_bar_thickness")) * 4
+                except Exception:
+                    _th = 0
+                _bottom = 25 + _sp + _th
+                # Two lines so it fits the gap between the HP readouts.
+                # progress_text returns "8 / 60 until rematch vs Misty";
+                # split on the first " until " and stack the halves.
+                _parts = _gym_line.split(" until ", 1)
+                if len(_parts) == 2:
+                    _gym_html = ('%s<br><span style="font-weight:normal;'
+                                 'font-size:11px;">until %s</span>'
+                                 % (_parts[0].strip(), _parts[1].strip()))
+                else:
+                    _gym_html = _gym_line
+                _gs = ('position:fixed;bottom:%dpx;left:50%%;'
+                       'transform:translateX(-50%%);z-index:9999;'
+                       'font-family:Arial,sans-serif;font-size:12px;'
+                       'font-weight:bold;color:#FFFFFF;text-align:center;'
+                       'line-height:1.15;max-width:210px;'
+                       'pointer-events:none;' % _bottom)
+                hud_html += ('<div id="gym-progress" class="Ankimon" '
+                             'style="' + _gs + '">' + _gym_html + '</div>')
+        except Exception:
+            pass
+        hud_html += '</div>'
+
+        # Build hud_css
+        hud_css = create_css_for_reviewer(
+            int(self.settings.get('gui.show_mainpkmn_in_reviewer')),
+            pokemon_hp_percent,
+            self.settings.get("gui.review_hp_bar_thickness") * 4,
+            int(self.settings.compute_special_variable('xp_bar_spacer')),
+            -1 if int(self.settings.get('gui.show_mainpkmn_in_reviewer')) == 1 else self.settings.compute_special_variable('view_main_front'),
+            mainpkmn_hp_percent,
+            int(self.settings.compute_special_variable('hp_only_spacer')),
+            int(self.settings.compute_special_variable('wild_hp_spacer')),
+            self.settings.get("gui.xp_bar_config"),
+            self.main_pokemon,
+            int(find_experience_for_level(self.main_pokemon.growth_rate, self.main_pokemon.level, self.settings.get("misc.remove_level_cap"))),
+            self.settings.compute_special_variable('xp_bar_location'),
+            enemy_hp_true_percent,
+            main_hp_true_percent
+        )
+        hud_css += """
+        #ankimon-hud #name-display, #ankimon-hud #myname-display, #ankimon-hud #hp-display, #ankimon-hud #myhp-display, #ankimon-hud #xp_text {
+            font-family: Arial, sans-serif;
+            background: white !important;
+            color: var(--text-fg, #6D6D6E);
+            border-radius: 5px !important;
+            padding: 4px 8px !important;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            #ankimon-hud #name-display, #ankimon-hud #myname-display, #ankimon-hud #hp-display, #ankimon-hud #myhp-display, #ankimon-hud #xp_text {
+                font-family: Arial, sans-serif;
+                background: #1f1f1f !important;
+                color: white !important;
+                border-radius: 5px !important;
+                padding: 4px 8px !important;
+            }
+        }
+
+        .night_mode #ankimon-hud #name-display, .night_mode #ankimon-hud #myname-display, .night_mode #ankimon-hud #hp-display,
+        .night_mode #ankimon-hud #myhp-display, .night_mode #ankimon-hud{
+            font-family: Arial, sans-serif;
+            background: #1f1f1f !important;
+            color: white !important;
+            border-radius: 5px !important;
+            padding: 4px 8px !important;
+        }
+
+        .night_mode #xp_text {
+            font-color: rgba(0, 191, 255, 0.85)
+            font-family: Arial, sans-serif;
+            background: #1f1f1f !important;
+            border-radius: 5px !important;
+            padding: 4px 8px !important;
+        }
+        """
+
+        # Use reviewer.web.eval to call the portal
+        # Store HUD data and auto-render if not hidden on startup
+        hud_hidden_on_startup = bool(self.settings.get("gui.hud_hidden_on_startup"))
+        js_code = f"""
+        (function(h,c,hiddenOnStartup){{
+            if(window.__ankimonHud){{
+                // Always update the stored data, regardless of visibility
+                window.__ankimonHudData = {{html: h, css: c}};
+                
+                // Only initialize on first call - preserve user's toggle state on subsequent updates
+                if(window.__ankimonHudHidden === undefined){{
+                    window.__ankimonHudHidden = hiddenOnStartup;
+                    window.__ankimonHudRendered = false;
+                }}
+                
+                // If HUD should be visible on startup, render it now
+                if(!hiddenOnStartup && !window.__ankimonHudRendered){{
+                    window.__ankimonHud.update(h,c);
+                    window.__ankimonHudRendered = true;
+                }}
+                // If HUD is already rendered and visible, update it with new data
+                else if(window.__ankimonHudRendered && !window.__ankimonHudHidden){{
+                    window.__ankimonHud.update(h,c);
+                }}
+                // If HUD is hidden, data is still stored in __ankimonHudData for when it's toggled on
+            }}
+        }})({json.dumps(hud_html)}, {json.dumps(hud_css)}, {str(hud_hidden_on_startup).lower()});
+        """
+        reviewer.web.eval(js_code)
+
+        # Add keydown listener to toggle HUD visibility
+        reviewer.web.eval("""
+            (function() {
+                if (window.ankimonKeyListener) return;
+                window.ankimonKeyListener = true;
+                let originalParent = null;
+                let hudHost = null;
+
+                document.addEventListener('keydown', function(event) {
+                    if (event.key === '8') {
+                        if (!hudHost) {
+                            hudHost = document.getElementById('ankimon-hud-host');
+                            if (hudHost) {
+                                originalParent = hudHost.parentNode;
+                            } else {
+                                console.error('Ankimon: ankimon-hud-host not found.');
+                                return;
+                            }
+                        }
+
+                        // First time: render if not yet rendered
+                        if (!window.__ankimonHudRendered && window.__ankimonHudData && window.__ankimonHud) {
+                            window.__ankimonHud.update(window.__ankimonHudData.html, window.__ankimonHudData.css);
+                            window.__ankimonHudRendered = true;
+                            originalParent = hudHost.parentNode;
+                            // Toggle visibility on first render
+                            window.__ankimonHudHidden = !window.__ankimonHudHidden;
+                            // If should be hidden, remove it from DOM
+                            if (window.__ankimonHudHidden && originalParent) {
+                                originalParent.removeChild(hudHost);
+                            }
+                        } else if (window.__ankimonHudRendered) {
+                            // Already rendered, toggle visibility
+                            window.__ankimonHudHidden = !window.__ankimonHudHidden;
+                            
+                            // If showing (unhiding), update with latest data
+                            if (!window.__ankimonHudHidden && window.__ankimonHudData && window.__ankimonHud) {
+                                window.__ankimonHud.update(window.__ankimonHudData.html, window.__ankimonHudData.css);
+                            }
+                            
+                            // Toggle DOM visibility
+                            if (hudHost.parentNode) {
+                                hudHost.parentNode.removeChild(hudHost);
+                            } else if (originalParent) {
+                                originalParent.appendChild(hudHost);
+                            }
+                        }
+                    }
+                });
+            })();
+        """)

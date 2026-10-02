@@ -1,0 +1,436 @@
+from datetime import datetime
+import random
+import json
+import uuid
+
+from aqt import mw
+from aqt.utils import showWarning
+from aqt.qt import (
+    QFont,
+    QLabel,
+    QPainter,
+    QPixmap,
+    Qt,
+    QVBoxLayout,
+    QWidget,
+    qconnect
+    )
+from PyQt6.QtGui import QColor
+from PyQt6.QtWidgets import (
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+    QHBoxLayout,
+    )
+
+from ..functions import starters
+
+from ..business import resize_pixmap_img
+from ..pyobj.pokemon_obj import PokemonObject
+from ..pyobj.settings import Settings
+from ..pyobj.InfoLogger import ShowInfoLogger
+from ..functions.badges_functions import check_for_badge, receive_badge
+from ..functions.battle_functions import calculate_hp
+from ..functions.pokedex_functions import get_base_experience, get_growth_rate, search_pokedex
+from ..functions.pokemon_functions import get_random_moves_for_pokemon, pick_random_gender
+from ..utils import load_custom_font, close_anki
+from ..resources import addon_dir, frontdefault
+from ..const import total_generations
+from .error_handler import show_warning_with_traceback
+
+class StarterWindow(QWidget):
+    def __init__(
+            self,
+            logger: ShowInfoLogger,
+            settings_obj: Settings,
+            ):
+        super().__init__()
+        self.init_ui()
+        #self.update()
+
+        # To avoid circular imports, instead of importing those things, we
+        # save a reference to them as an attribute
+        self.logger = logger
+        self.settings_obj = settings_obj
+
+        self.current_gen = 0 # Start with Gen 1
+
+    def init_ui(self):
+        basic_layout = QVBoxLayout()
+        # Set window
+        self.setWindowTitle('Choose a Starter')
+        self.setLayout(basic_layout)
+        self.starter = False
+
+    def open_dynamic_window(self):
+        if self.isVisible() is False:
+            self.show()
+        else:
+            self.close()
+
+    def clear_layout(self, layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+    def keyPressEvent(self, event):
+        # Close the main window when the spacebar is pressed
+        if event.key() == Qt.Key.Key_G:  # Updated to Key_G for PyQt 6
+            # First encounter image
+            if not self.starter:
+                self.current_gen = (self.current_gen + 1) % total_generations
+                self.display_starter_pokemon()
+            # If self.starter is True, simply pass (do nothing)
+            else:
+                pass
+
+    def choose_pokemon(self, starter_name):
+        # Create a dictionary to store the Pokémon's data
+        # add all new values like hp as max_hp, evolution_data, description and growth rate
+        name = search_pokedex(starter_name, "name")
+        id = search_pokedex(starter_name, "species_id")
+        base_stats = search_pokedex(starter_name, "baseStats")
+        abilities = search_pokedex(starter_name, "abilities")
+        gender = pick_random_gender(name.lower())
+        numeric_abilities = {k: v for k, v in abilities.items() if k.isdigit()}
+        # Check if there are numeric abilities
+        if numeric_abilities:
+            # Convert the filtered abilities dictionary values to a list
+            abilities_list = list(numeric_abilities.values())
+            # Select a random ability from the list
+            ability = random.choice(abilities_list)
+        else:
+            # Set to "No Ability" if there are no numeric abilities
+            ability = "No Ability"
+        type = search_pokedex(starter_name, "types")
+        name = search_pokedex(starter_name, "name")
+        growth_rate = get_growth_rate(id)
+        base_experience = get_base_experience(search_pokedex(starter_name, "actual_id"))
+        level = 5
+        attacks = get_random_moves_for_pokemon(starter_name, level)
+        ev = {
+            "hp": 0,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+        }
+        iv = {
+            "hp": random.randint(0, 31),
+            "atk": random.randint(0, 31),
+            "def": random.randint(0, 31),
+            "spa": random.randint(0, 31),
+            "spd": random.randint(0, 31),
+            "spe": random.randint(0, 31)
+        }
+        main_pokemon = PokemonObject(
+            name=name,
+            gender=gender,
+            level=level,
+            id=id,
+            ability=ability,
+            type=type,
+            base_stats=base_stats,
+            ev=ev,
+            iv=iv,
+            attacks=attacks,
+            base_experience=base_experience,
+            current_hp=calculate_hp(int(base_stats["hp"]), level, ev, iv),
+            growth_rate=growth_rate,
+            individual_id=str(uuid.uuid4()),
+            captured_date=None,
+            shiny=False,
+            tier="Starter",
+        )
+
+        # Load existing Pokémon data from database
+        db = mw.ankimon_db
+        caught_pokemon_data = main_pokemon.to_dict()
+
+        # Save to database - both as captured pokemon and main pokemon
+        db.save_pokemon(caught_pokemon_data)
+        db.save_main_pokemon(main_pokemon.to_dict())
+
+        self.logger.log_and_showinfo("info",f"{_pname(name)} has been chosen as Starter Pokémon !")
+
+        self.display_chosen_starter_pokemon(starter_name)
+
+        from ..singletons import pokemon_pc
+        pokemon_pc.refresh_pokemon_grid()
+
+        close_anki()
+
+    def get_starters_of_gen(self):
+        try:
+            # Reload the JSON data from the file
+            # Convert the input to lowercase to match the values in our JSON data
+            # Filter the Pokémon data to only include those in the given tier
+            water_starter = []
+            fire_starter = []
+            grass_starter = []
+            for pokemon in starters.STARTER:
+                types = search_pokedex(pokemon, "types")
+                for type in types:
+                    if type == "Grass":
+                        grass_starter.append(pokemon)
+                    elif type == "Fire":
+                        fire_starter.append(pokemon)
+                    elif type == "Water":
+                        water_starter.append(pokemon)
+            water_start = f"{water_starter[self.current_gen]}"
+            fire_start = f"{fire_starter[self.current_gen]}"
+            grass_start = f"{grass_starter[self.current_gen]}"
+            return water_start, fire_start, grass_start
+        except Exception as e:
+            show_warning_with_traceback(parent=mw, exception=e, message=f"Error in get_starters_of_gen: {e}")
+            return None, None, None
+
+    def display_starter_pokemon(self):
+        self.setMaximumWidth(512)
+        self.setMaximumHeight(320)
+        self.clear_layout(self.layout())
+        layout = self.layout()
+        water_start, fire_start, grass_start = self.get_starters_of_gen()
+        starter_label = self.pokemon_display_starter(water_start, fire_start, grass_start)
+        self.water_starter_button, self.fire_starter_button, self.grass_start_button = self.pokemon_display_starter_buttons(water_start, fire_start, grass_start)
+        layout.addWidget(starter_label)
+        button_widget = QWidget()
+        layout_buttons = QHBoxLayout()
+        layout_buttons.addWidget(self.water_starter_button)
+        layout_buttons.addWidget(self.fire_starter_button)
+        layout_buttons.addWidget(self.grass_start_button)
+        button_widget.setLayout(layout_buttons)
+        layout.addWidget(button_widget)
+        self.setStyleSheet("background-color: rgb(14,14,14);")
+        self.setLayout(layout)
+        self.show()
+
+    def display_chosen_starter_pokemon(self, starter_name):
+        self.clear_layout(self.layout())
+        layout = self.layout()
+        starter_label = self.pokemon_display_chosen_starter(starter_name)
+        layout.addWidget(starter_label)
+        self.setStyleSheet("background-color: rgb(14,14,14);")
+        self.setLayout(layout)
+        self.setMaximumWidth(512)
+        self.setMaximumHeight(340)
+        self.show()
+        self.starter = True
+        self.logger.log_and_showinfo("info","You have chosen your Starter Pokemon ! \n You can now close this window ! \n Please restart your Anki to restart your Pokemon Journey!")
+        #global achievments
+        #check = check_for_badge(achievements, 7)
+        #if check is False:
+        #    receive_badge(7, achievements)
+
+    def display_fossil_pokemon(self, fossil_id, fossil_name):
+        self.clear_layout(self.layout())
+        layout = self.layout()
+        fossil_label = self.pokemon_display_fossil_pokemon(fossil_id, fossil_name)
+        layout.addWidget(fossil_label)
+        self.setStyleSheet("background-color: rgb(14,14,14);")
+        self.setLayout(layout)
+        self.setMaximumWidth(512)
+        self.setMaximumHeight(340)
+        self.show()
+        self.starter = True
+        self.logger.log_and_showinfo("info","You have received your Fossil Pokemon ! \n You can now close this window !")
+        global achievments
+        #check = check_for_badge(achievements, 19)
+        #if check is False:
+        #    receive_badge(19, achievements)
+
+    def pokemon_display_starter_buttons(self, water_start, fire_start, grass_start):
+        # Create buttons for catching and killing the Pokémon
+        water_starter_button = QPushButton(f"{(water_start).capitalize()}")
+        water_starter_button.setFont(QFont("Arial",12))  # Adjust the font size and style as needed
+        water_starter_button.setStyleSheet("background-color: rgb(44,44,44);")
+        #qconnect(water_starter_button.clicked, choose_pokemon)
+        qconnect(water_starter_button.clicked, lambda: self.choose_pokemon(water_start))
+
+        fire_starter_button = QPushButton(f"{(fire_start).capitalize()}")
+        fire_starter_button.setFont(QFont("Arial", 12))  # Adjust the font size and style as needed
+        fire_starter_button.setStyleSheet("background-color: rgb(44,44,44);")
+        #qconnect(fire_starter_button.clicked, choose_pokemon)
+        qconnect(fire_starter_button.clicked, lambda: self.choose_pokemon(fire_start))
+        # Set the merged image as the pixmap for the QLabel
+
+        grass_start_button = QPushButton(f"{(grass_start).capitalize()}")
+        grass_start_button.setFont(QFont("Arial", 12))  # Adjust the font size and style as needed
+        grass_start_button.setStyleSheet("background-color: rgb(44,44,44);")
+        #qconnect(grass_start_button.clicked, choose_pokemon)
+        qconnect(grass_start_button.clicked, lambda: self.choose_pokemon(grass_start))
+        # Set the merged image as the pixmap for the QLabel
+
+        return water_starter_button, fire_starter_button, grass_start_button
+
+    def pokemon_display_starter(self, water_start, fire_start, grass_start):
+        bckgimage_path = addon_dir / "addon_sprites" / "starter_screen" / "bckg.png"
+        water_id = int(search_pokedex(water_start, "species_id"))
+        grass_id = int(search_pokedex(grass_start, "species_id"))
+        fire_id = int(search_pokedex(fire_start, "species_id"))
+
+        # Load the background image
+        pixmap_bckg = QPixmap()
+        pixmap_bckg.load(str(bckgimage_path))
+
+        # Display the Pokémon image
+        water_path = frontdefault / f"{water_id}.png"
+        water_label = QLabel()
+        water_pixmap = QPixmap()
+        water_pixmap.load(str(water_path))
+
+        # Display the Pokémon image
+        fire_path = frontdefault / f"{fire_id}.png"
+        fire_label = QLabel()
+        fire_pixmap = QPixmap()
+        fire_pixmap.load(str(fire_path))
+
+        # Display the Pokémon image
+        grass_path = frontdefault / f"{grass_id}.png"
+        grass_label = QLabel()
+        grass_pixmap = QPixmap()
+        grass_pixmap.load(str(grass_path))
+
+        def resize_pixmap_img(pixmap):
+            max_width = 150
+            original_width = pixmap.width()
+            original_height = pixmap.height()
+            new_width = max_width
+            new_height = (original_height * max_width) // original_width
+            pixmap2 = pixmap.scaled(new_width, new_height)
+            return pixmap2
+
+        water_pixmap = resize_pixmap_img(water_pixmap)
+        fire_pixmap = resize_pixmap_img(fire_pixmap)
+        grass_pixmap = resize_pixmap_img(grass_pixmap)
+
+        # Merge the background image and the Pokémon image
+        merged_pixmap = QPixmap(pixmap_bckg.size())
+        merged_pixmap.fill(QColor(0, 0, 0, 0))  # RGBA where A (alpha) is 0 for full transparency
+        #merged_pixmap.fill(Qt.transparent)
+        # merge both images together
+        painter = QPainter(merged_pixmap)
+        # draw background to a specific pixel
+        painter.drawPixmap(0, 0, pixmap_bckg)
+
+        painter.drawPixmap(57,-5,water_pixmap)
+        painter.drawPixmap(182,-5,fire_pixmap)
+        painter.drawPixmap(311,-3,grass_pixmap)
+
+        # custom font
+        custom_font = load_custom_font(28, int(self.settings_obj.get("misc.language")))
+        message_box_text = "Choose your Starter Pokémon"
+        # Draw the text on top of the image
+        # Adjust the font size as needed
+        painter.setFont(custom_font)
+        painter.setPen(QColor(255,255,255))  # Text color
+        painter.drawText(110, 310, message_box_text)
+        custom_font = load_custom_font(20, int(self.settings_obj.get("misc.language")))
+        painter.setFont(custom_font)
+        next_gen = (self.current_gen + 1) % total_generations + 1
+        painter.drawText(10, 330, f"Press G for Gen {next_gen}")
+        painter.end()
+        # Set the merged image as the pixmap for the QLabel
+        starter_label = QLabel()
+        starter_label.setPixmap(merged_pixmap)
+
+        return starter_label
+
+    def pokemon_display_chosen_starter(self, starter_name):
+        bckgimage_path = addon_dir / "addon_sprites" / "starter_screen" / "bg.png"
+        id = int(search_pokedex(starter_name, "species_id"))
+
+        # Load the background image
+        pixmap_bckg = QPixmap()
+        pixmap_bckg.load(str(bckgimage_path))
+
+        # Display the Pokémon image
+        image_path = frontdefault / f"{id}.png"
+        image_label = QLabel()
+        image_pixmap = QPixmap()
+        image_pixmap.load(str(image_path))
+        image_pixmap = resize_pixmap_img(image_pixmap, 250)
+
+        # Merge the background image and the Pokémon image
+        merged_pixmap = QPixmap(pixmap_bckg.size())
+        #merged_pixmap.fill(Qt.transparent)
+        merged_pixmap.fill(QColor(0, 0, 0, 0))  # RGBA where A (alpha) is 0 for full transparency
+        # merge both images together
+        painter = QPainter(merged_pixmap)
+        # draw background to a specific pixel
+        painter.drawPixmap(0, 0, pixmap_bckg)
+        painter.drawPixmap(125,10,image_pixmap)
+
+        # custom font
+        custom_font = load_custom_font(32, int(self.settings_obj.get("misc.language")))
+        message_box_text = f"{(starter_name).capitalize()} was chosen as Starter !"
+        # Draw the text on top of the image
+        # Adjust the font size as needed
+        painter.setFont(custom_font)
+        painter.setPen(QColor(255,255,255))  # Text color
+        painter.drawText(40, 290, message_box_text)
+        painter.end()
+        # Set the merged image as the pixmap for the QLabel
+        starter_label = QLabel()
+        starter_label.setPixmap(merged_pixmap)
+
+        return starter_label
+
+    def pokemon_display_fossil_pokemon(self, fossil_id, fossil_name):
+        bckgimage_path = addon_dir / "addon_sprites" / "starter_screen" / "bg.png"
+        id = fossil_id
+
+        # Load the background image
+        pixmap_bckg = QPixmap()
+        pixmap_bckg.load(str(bckgimage_path))
+
+        # Display the Pokémon image
+        image_path = frontdefault / f"{id}.png"
+        image_label = QLabel()
+        image_pixmap = QPixmap()
+        image_pixmap.load(str(image_path))
+        image_pixmap = resize_pixmap_img(image_pixmap, 250)
+
+        # Merge the background image and the Pokémon image
+        merged_pixmap = QPixmap(pixmap_bckg.size())
+        #merged_pixmap.fill(Qt.transparent)
+        merged_pixmap.fill(QColor(0, 0, 0, 0))  # RGBA where A (alpha) is 0 for full transparency
+        # merge both images together
+        painter = QPainter(merged_pixmap)
+        # draw background to a specific pixel
+        painter.drawPixmap(0, 0, pixmap_bckg)
+        painter.drawPixmap(125,10,image_pixmap)
+
+        # custom font
+        custom_font = load_custom_font(32, int(self.settings_obj.get("misc.language")))
+        message_box_text = f"{(fossil_name).capitalize()} was brought to life !"
+        # Draw the text on top of the image
+        # Adjust the font size as needed
+        painter.setFont(custom_font)
+        painter.setPen(QColor(255,255,255))  # Text color
+        painter.drawText(40, 290, message_box_text)
+        painter.end()
+        # Set the merged image as the pixmap for the QLabel
+        fossil_label = QLabel()
+        fossil_label.setPixmap(merged_pixmap)
+
+        return fossil_label
+
+
+def _pname(n):
+    """Real Pokémon name for display ("Iron Hands", "Mr. Mime")."""
+    try:
+        from ..functions.pokedex_functions import display_name
+        return display_name(n)
+    except Exception:
+        s = str(n or "")
+        return s[:1].upper() + s[1:]
+
+
+def _cap1(s):
+    """Capitalise the first letter only (keeps "Iron Hands", "Ho-Oh")."""
+    s = str(s or "")
+    return s[:1].upper() + s[1:]

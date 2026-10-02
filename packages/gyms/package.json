@@ -1,0 +1,7 @@
+{
+  "name": "gyms",
+  "version": "2.0.0",
+  "summary": "Gym ladders in all 9 regions, badges, level caps and legendary expeditions.",
+  "requires": [],
+  "works_better_with": ["showdown", "wild"]
+}
