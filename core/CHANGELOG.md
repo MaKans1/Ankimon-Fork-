@@ -45,6 +45,9 @@ Bug fixes and quality-of-life changes on top of Ankimon 2.03. The core is always
 - Move buttons and hover cards show type, category, power, accuracy and PP.
 - Pop-up messages stack instead of drawing on top of each other.
 
+## Fixes
+- **Monthly gift Pokémon** now arrives even if you don't own last month's. Before, the check for last month's Pokémon crashed and nothing was awarded, every time Anki started.
+
 ## Settings
 - **Goal of Daily Average Cards** drives pacing. Gym intervals and EXP each show "For your goal of N cards a day, recommended: X", and are filled in when you change the goal. The target is about four months to clear all gyms and expeditions at your goal.
 - New defaults for the default goal (100 cards a day, 2 cards per round):
