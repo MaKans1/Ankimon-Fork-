@@ -28,7 +28,7 @@ from aqt.qt import (
 
 from ..singletons import logger
 from .gym_state import GymSession, GymProgress, TEAM_SIZE
-from .gym_data import next_gym, ladder_complete, current_region, level_cap
+from .gym_data import next_gym, ladder_complete, current_region, level_cap, gate_reviews
 from . import gym_battle as GB
 from . import gym_config as CFG
 
@@ -52,6 +52,11 @@ def progress() -> GymProgress:
     global _progress
     if _progress is None:
         _progress = GymProgress(mw.ankimon_db)
+        try:
+            from .gym_data import ALOLA_MIGRATION
+            _progress.migrate_ids(ALOLA_MIGRATION, "alola_usum")
+        except Exception as e:
+            _log("warning", "Alola progress migration failed: %s" % e)
     return _progress
 
 
@@ -184,6 +189,26 @@ class _SortItem(QListWidgetItem):
         return self.order < getattr(other, "order", (0,))
 
 
+def _held_label(rec) -> str:
+    """'   - holding Normalium Z ✦' for the team list ('' when it holds nothing).
+    ✦ = a Z-Crystal it can use right now (it knows a move of that type)."""
+    item = (rec or {}).get("held_item")
+    if not item:
+        return ""
+    try:
+        from ..utils import item_display_name
+        label = item_display_name(item)
+    except Exception:
+        label = str(item).replace("-", " ").title()
+    try:
+        from . import zmoves
+        if zmoves.crystal_type(item) and zmoves.can_use_crystal(rec, item):
+            label += " ✦"
+    except Exception:
+        pass
+    return "   - holding %s" % label
+
+
 class TeamSelectDialog(QDialog):
     """Pick exactly 3 from the player's 6-slot party."""
 
@@ -230,9 +255,9 @@ class TeamSelectDialog(QDialog):
         self.list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
         for n, rec in enumerate(party):
             tl = PS.type_label(rec.get("type"))
-            it = _SortItem("%s   Lv %s%s" % (
+            it = _SortItem("%s   Lv %s%s%s" % (
                 _dn(rec.get("name", "?")), rec.get("level", "?"),
-                ("   " + tl) if tl else ""))
+                ("   " + tl) if tl else "", _held_label(rec)))
             it.setData(Qt.ItemDataRole.UserRole, rec)
             it.order = it.order_orig = (n,)
             self.list.addItem(it)
@@ -321,7 +346,7 @@ def _finish(session: GymSession):
         body = [session.summary(), ""] + notes
         # Classic Elite Four: a win rolls straight into the next member with
         # the same three, healed, and no review interval in between.
-        if won and session.gym.is_elite and CFG.elite_four_classic():
+        if won and session.gym.is_elite and CFG.elite_four_classic() and not getattr(session.gym, "is_rematch", False):
             nxt = next_gym(progress().defeated_ids())
             if nxt is not None and nxt.is_elite:
                 chain_next = nxt
@@ -329,19 +354,32 @@ def _finish(session: GymSession):
                 body.append("%s steps up next. Your team is healed, but you "
                             "keep the same three." % nxt.leader)
 
-        if won and ladder_complete(progress().defeated_ids()):
+        if (won and not getattr(session.gym, "is_rematch", False) and not getattr(session.gym, "is_legend", False)
+                and not getattr(session.gym, "is_test", False) and ladder_complete(progress().defeated_ids())):
             body.append("")
-            if current_region() == "Kanto":
-                body.append("That is the whole ladder — every gym, the Elite Four "
-                            "and the Champion. You are done.")
+            if _full_ladder():
+                body.append("That is the whole %s ladder — every gym, the Elite Four "
+                            "and the Champion. Your level cap here is lifted." % current_region())
             else:
                 body.append("That's every %s gym built so far. Travel on, or come "
                             "back when more open up." % current_region())
-        QMessageBox.information(
-            mw,
-            "You defeated %s!" % session.gym.leader if won
-            else "You lost to %s" % session.gym.leader,
-            "\n".join(body))
+        # rich text so Z items show in gold (gym_battle.zspan / notes_html)
+        box = QMessageBox(mw)
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setWindowTitle("You defeated %s!" % session.gym.leader if won
+                           else "You lost to %s" % session.gym.leader)
+        box.setTextFormat(Qt.TextFormat.RichText)
+        box.setText(GB.notes_html(body))
+        box.exec()
+        if won and (getattr(session.gym, "totem", None) or getattr(session.gym, "titan", None)):
+            from . import totem as _totem
+            _totem.offer_catch(session.gym)     # Alola totem / Paldea Titan: its species may join you
+        if won:
+            try:                                # Paldea: "Where to next?" after a gym or Titan
+                from . import paldea as _pal
+                _pal.after_win(session.gym)
+            except Exception as e:
+                _log("warning", "Paldea route: %s" % e)
     except Exception as e:
         _log("error", "finishing gym failed: %s" % e)
     finally:
@@ -358,6 +396,15 @@ def _finish(session: GymSession):
             start_gym(chain_next, reuse_selection=True)
         except Exception as e:
             _log("error", "elite chain failed: %s" % e)
+
+
+def _full_ladder() -> bool:
+    """This region has its whole ladder (Elite Four and Champion), like Kanto."""
+    try:
+        from .gym_data import ladder, CHAMPION
+        return any(g.kind == CHAMPION for g in ladder())
+    except Exception:
+        return current_region() == "Kanto"
 
 
 def _prestart_showdown(offer: bool = True):
@@ -410,7 +457,9 @@ def start_gym(gym, reuse_selection: bool = False) -> bool:
     else:
         dlg = TeamSelectDialog(gym, party, parent=mw)
         if dlg.exec() != QDialog.DialogCode.Accepted:
-            _set_declined_at(region_reviews())
+            if not (getattr(gym, "is_rematch", False) or getattr(gym, "is_legend", False)
+                    or getattr(gym, "is_test", False)):
+                _set_declined_at(region_reviews())
             _close_engine(sd)
             return False
         selection, auto = dlg.selected, dlg.auto_battle
@@ -419,19 +468,49 @@ def start_gym(gym, reuse_selection: bool = False) -> bool:
         # the engine may have finished downloading while you picked your team
         sd = _prestart_showdown(offer=False)
 
+    from . import tera as _tr
+    if _tr.config_for(gym)["p2"] and getattr(gym, "tera", ""):
+        # Paldea: the ace's Tera type is rolled for every fight (mostly counters)
+        import copy as _copy
+        gym = _copy.copy(gym)
+        gym.tera_rolled = _tr.roll_ace_type(gym.tera)
     player = GB.build_player_team(selection)
+    if getattr(gym, "test_mech", "") in ("tera", "titan"):
+        # Game > Test Tera: anyone holding nothing gets a Tera Shard of a random
+        # type for this battle only
+        import random as _rnd
+        for c in player:
+            if c.source is not None and not getattr(c.source, "held_item", None):
+                c.source.held_item = _tr.shard_item(_rnd.choice(_tr.TYPES))
+    if getattr(gym, "test_mech", "") == "z":
+        # Game > Test Z-Moves: anyone holding nothing gets a Z-Crystal for one of
+        # its moves, for this battle only (the copies are thrown away after)
+        from . import zmoves as _zm
+        for c in player:
+            if c.source is not None and not getattr(c.source, "held_item", None):
+                c.source.held_item = _zm.crystal_for(c.attacks) or None
     leader = GB.build_leader_team(gym)
+    if getattr(gym, "is_legend", False):      # roaming legendary / mythical (legends.py)
+        from . import legends as _lg
+        _lg.prepare(leader, gym)
     if not player or not leader:
         _close_engine(sd)
         QMessageBox.warning(mw, "Gym",
                             "Could not build one of the teams. See the Ankimon log.")
         return False
 
-    _set_declined_at(-1)        # accepted: any "Not now" cooldown is moot
+    if getattr(gym, "is_rematch", False):
+        from . import rematch as _rm
+        _rm.consume()               # a rematch was started: its cooldown begins again
+    elif not (getattr(gym, "is_legend", False) or getattr(gym, "is_test", False)):
+        _set_declined_at(-1)        # accepted: any "Not now" cooldown is moot
     _session = GymSession(gym, player, leader)
     if sd is not None:
         try:
-            sd.start(player, leader, gym.leader)
+            from . import dmax as _dm, tera as _tr
+            sd.start(player, leader, gym.leader, totem=getattr(gym, "totem", None),
+                     dynamax=_dm.config_for(gym), tera=_tr.config_for(gym),
+                     titan=getattr(gym, "titan", None))
             _session.engine = sd            # real-game rules for this fight
         except Exception as e:
             _log("warning", "Showdown engine could not start this fight, using classic: %s" % e)
@@ -465,7 +544,7 @@ def progress_text() -> str:
         gym = next_gym(progress().defeated_ids())
         if gym is None:
             r = current_region()
-            return ("All gyms defeated" if r == "Kanto"
+            return ("All %s gyms defeated" % r if _full_ladder()
                     else "%s: every gym so far beaten - more coming" % r)
 
         reviews = region_reviews()
@@ -482,7 +561,7 @@ def progress_text() -> str:
                           "until rematch vs %s" % gym.leader))
         else:
             gates.append((progress().unlock_point(gym, CFG.reviews_per_gym()),
-                          max(1, CFG.reviews_per_gym()),
+                          max(1, gate_reviews(gym, CFG.reviews_per_gym())),
                           "until %s (%s)" % (gym.name, gym.leader)))
 
         dt = _decline_target()
@@ -546,6 +625,21 @@ def handle_review(review_count: int = 0):
     try:
         ensure_menu()
         _bump_reviews()
+        try:
+            from . import rematch as _rm
+            _rm.on_review()             # small "rematch ready" notice
+        except Exception:
+            pass
+        try:
+            from . import legends as _lg
+            _lg.maybe_offer()           # a roaming legendary / mythical crossed your path
+        except Exception:
+            pass
+        try:
+            from . import paldea as _pd
+            _pd.stake_tick()            # Paldea: a ruinous stake, now and then
+        except Exception:
+            pass
         if gym_is_active():
             return                      # window open; nothing to do here
         if not CFG.enabled():
@@ -577,7 +671,7 @@ def open_gym_manually():
     gym = next_gym(progress().defeated_ids())
     if gym is None:
         QMessageBox.information(mw, "Gyms", "You have beaten every gym in %s%s." % (
-            current_region(), "" if current_region() == "Kanto" else " built so far"))
+            current_region(), "" if _full_ladder() else " built so far"))
         return
     reviews = region_reviews()
     ok, reason = progress().can_challenge(gym, reviews)

@@ -114,7 +114,11 @@ def on_review_card(*args):
         s.item_receive_value -= 1
         if s.item_receive_value <= 0:
             s.item_receive_value = random.randint(3, 385)
-            test_window.display_item()
+            if str(settings_obj.get("battle.popup_item_pickup", True)).strip().lower() in ("false", "0", "no", "off"):
+                from .utils import random_item
+                random_item()           # still found - just no popup
+            else:
+                test_window.display_item()
             if not check_for_badge(achievements, 6):
                 receive_badge(6, achievements)
 

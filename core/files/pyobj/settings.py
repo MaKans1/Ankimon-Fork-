@@ -18,6 +18,7 @@ from ..resources import user_path
 DEFAULT_CONFIG = {
     "battle.replace_duplicate_catches": True,
     "battle.duplicate_level_window": 5,
+    "battle.upgrade_priority": "iv",          # Upgrade Behavior: "iv" or "level"
     "battle.wild_levels_follow_badges": True,
     "battle.show_battle_popups": False,
     "battle.popup_damage": False,
@@ -25,6 +26,8 @@ DEFAULT_CONFIG = {
     "battle.popup_xp": False,
     "battle.popup_levelup": False,
     "battle.popup_catch": False,
+    "battle.popup_rematch": True,
+    "battle.popup_item_pickup": True,
     "gym.elite_four_classic": True,
     "battle.defeat_xp_multiplier": 4.33,   # pacing for the default goal (100/day, 2 per round)
     "battle.capture_xp_multiplier": 0.2,
@@ -37,7 +40,7 @@ DEFAULT_CONFIG = {
     "gym.original_movesets": False,
     "gym.auto_battle": True,
     "gym.show_battle_log": True,
-    "battle.automatic_battle": 0,
+    "battle.automatic_battle": 3,
     "battle.cards_per_round": 2,
     "battle.daily_average": 100,
     "battle.card_max_time": 60,

@@ -24,6 +24,12 @@ from aqt.webview import WebContent
 from .resources import ensure_ankimon_infrastructure, user_path, addon_dir
 ensure_ankimon_infrastructure(addon_dir, user_path)
 
+try:                # Ankimon 2.0: switch off the packages you don't use, before anything imports them
+    from . import ankimon_packages
+    ankimon_packages.apply()
+except Exception:
+    pass
+
 from .singletons import (
     settings_obj,
     settings_window,

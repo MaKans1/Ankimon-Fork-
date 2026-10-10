@@ -339,6 +339,10 @@ def random_item():
             continue
         if name.endswith("-nugget"):
             continue
+        if name.endswith("ium-z") or name == "z-ring" or name in REWARD_ONLY:
+            continue                    # trial / gym / Titan rewards, never random drops
+        if name.endswith("-tera-shard"):
+            continue                    # Tera Shards: Paldea leaders drop the one their ace used
 
         item_names.append(name)
 
@@ -352,6 +356,7 @@ def random_item():
         tm_name = _random_tm_move()
         if tm_name:
             give_item(tm_name, "TM")
+            _LAST_TM[0] = tm_name           # item_display_name() names the move
             return _tm_sprite_for_move(tm_name)
 
     item_name = random.choice(item_names)
@@ -361,6 +366,46 @@ def random_item():
 
 
 TM_DROP_CHANCE = 0.12
+_LAST_TM = [None]       # the move of the last TM random_item() gave
+_ITEM_NAMES = None      # item identifier -> official English name
+
+
+def item_display_name(item):
+    """What the player should read: 'super-potion' -> 'Super Potion',
+    'pp-up' -> 'PP Up'; a TM drop (random_item returns its type sprite)
+    -> 'TM Aerial Ace'."""
+    s = str(item or "")
+    if s == "z-ring":
+        return "Z-Ring"
+    if s in REWARD_NAMES:
+        return REWARD_NAMES[s]
+    if s.endswith("-tera-shard"):
+        return "Tera Shard (%s)" % s[:-len("-tera-shard")].capitalize()
+    if s.startswith("Bag_TM_"):
+        move = _LAST_TM[0]
+        if move:
+            try:
+                return "TM " + format_move_name(move)
+            except Exception:
+                return "TM " + str(move).replace("-", " ").title()
+        parts = s.split("_")
+        return "a %s-type TM" % (parts[2].capitalize() if len(parts) > 2 else "Normal")
+    global _ITEM_NAMES
+    if _ITEM_NAMES is None:
+        _ITEM_NAMES = {}
+        try:
+            from .resources import csv_file_items          # data_files/item_names.csv
+            ids = {}
+            with open(csv_file_items.parent / "items.csv", encoding="utf-8") as f:
+                for row in csv.DictReader(f):
+                    ids[row["id"]] = row["identifier"]
+            with open(csv_file_items, encoding="utf-8") as f:
+                for row in csv.DictReader(f):
+                    if row.get("local_language_id") == "9" and row.get("item_id") in ids:
+                        _ITEM_NAMES[ids[row["item_id"]]] = row["name"]
+        except Exception:
+            pass
+    return _ITEM_NAMES.get(s.lower()) or s.replace("-", " ").title()
 
 
 def _random_tm_move():
@@ -548,6 +593,53 @@ _item_desc_cache = None   # {(item_id, language_id): newest game's text}
 
 
 # Assuming the data is stored in a CSV file named 'item_flavor_texts.csv'
+_Z_TYPES = {"normalium": "Normal", "firium": "Fire", "waterium": "Water", "electrium": "Electric",
+            "grassium": "Grass", "icium": "Ice", "fightinium": "Fighting", "poisonium": "Poison",
+            "groundium": "Ground", "flyinium": "Flying", "psychium": "Psychic", "buginium": "Bug",
+            "rockium": "Rock", "ghostium": "Ghost", "dragonium": "Dragon", "darkinium": "Dark",
+            "steelium": "Steel", "fairium": "Fairy"}
+
+
+# Galar / Paldea rewards: never random drops, named and described here
+REWARD_ONLY = {"dynamax-band", "tera-orb", "herba-mystica",
+               "purple-stake", "yellow-stake", "green-stake", "blue-stake"}
+REWARD_NAMES = {"dynamax-band": "Dynamax Band", "tera-orb": "Tera Orb", "herba-mystica": "Herba Mystica",
+                "purple-stake": "Purple Stake", "yellow-stake": "Yellow Stake",
+                "green-stake": "Green Stake", "blue-stake": "Blue Stake"}
+_SHRINES = {"purple": "Grasswither Shrine", "yellow": "Icerend Shrine",
+            "green": "Groundblight Shrine", "blue": "Firescourge Shrine"}
+
+
+def _z_item_text(item_name):
+    """Descriptions for the Alola trial rewards (not in the item tables)."""
+    s = str(item_name or "").lower()
+    if s == "dynamax-band":
+        return ("A band from Galar. With it, your Pokémon can Dynamax once per battle in "
+                "Galar's gyms and battles. Nothing to equip.")
+    if s == "tera-orb":
+        return ("An orb from Paldea. With it, your Pokémon can Terastallize once per battle in "
+                "Paldea's gyms and battles. It recharges itself after every battle.")
+    if s == "herba-mystica":
+        return ("A rare herb from Paldea's Titans. Eat it, and shiny Pokémon become more "
+                "likely to appear for a while.")
+    if s.endswith("-stake") and s[:-6] in _SHRINES:
+        return ("A %s stake, driven into the ground somewhere in Paldea. Find four of this "
+                "colour to break the seal on the %s." % (s[:-6], _SHRINES[s[:-6]]))
+    if s.endswith("-tera-shard"):
+        t = s[:-len("-tera-shard")].capitalize()
+        return ("A Tera Shard. Give it to a Pokémon to hold: with the Tera Orb it can Terastallize "
+                "into the %s type once per battle in Paldea - it then defends as a %s type and its "
+                "weakest attack becomes Tera Blast, a %s move, for the rest of that battle." % (t, t, t))
+    if s == "z-ring":
+        return ("A bracelet from the Alola trials. With it, a Pokémon holding a Z-Crystal "
+                "can use its Z-Move once per gym battle. Nothing to equip.")
+    if s.endswith("-z") and s[:-2] in _Z_TYPES:
+        return ("A Z-Crystal from the Alola trials. Give it to a Pokémon to hold: in gym "
+                "battles it can turn one of its %s-type moves into a Z-Move, once per "
+                "battle (needs the Z-Ring)." % _Z_TYPES[s[:-2]])
+    return None
+
+
 def get_item_description(item_name, language_id):
     """
     Fetch the flavor text for an item based on its item_id, version_group_id, and language_id.
@@ -557,6 +649,8 @@ def get_item_description(item_name, language_id):
     :param file_path: The path to the CSV file containing the flavor texts.
     :return: The flavor text if found, otherwise None.
     """
+    if _z_item_text(item_name):
+        return _z_item_text(item_name)
     try:
         item_id = get_item_id(item_name)
         file_path = csv_file_descriptions

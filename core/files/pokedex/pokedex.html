@@ -560,14 +560,15 @@
         
         // In shiny mode, show all Pokémon but use shiny sprites
         // In normal mode, show all Pokémon with normal sprites
+        // Only the selected region (All = the National Dex)
+        const pool = regionNumbers();
+        const owned = useShiny ? shinyNumbers : caughtNumbers;
         if (currentFilter === "caught") {
-          displayNumbers = useShiny ? shinyNumbers : caughtNumbers;
+          displayNumbers = pool.filter(number => owned.includes(number));
         } else if (currentFilter === "not-caught") {
-          displayNumbers = useShiny 
-            ? allNumbers.filter(number => !shinyNumbers.includes(number))
-            : allNumbers.filter(number => !caughtNumbers.includes(number));
+          displayNumbers = pool.filter(number => !owned.includes(number));
         } else {
-          displayNumbers = allNumbers; // Show all Pokémon
+          displayNumbers = pool;
         }
 
         const startIndex = currentPage * itemsPerPage;

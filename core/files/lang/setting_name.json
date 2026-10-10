@@ -74,5 +74,8 @@
     "battle.popup_catch": "Show Catch Popups",
     "misc.region": "Wild Region",
     "gym.showdown_engine": "Real Game Battle Rules (Showdown)",
-    "gym.original_movesets": "Gym Moveset: Original (in-game sets)"
+    "gym.original_movesets": "Gym Moveset: Original (in-game sets)",
+    "battle.upgrade_priority": "Upgrade Behavior",
+    "battle.popup_item_pickup": "Show Item Pickup Popups",
+    "battle.popup_rematch": "Show Rematch Ready Popup"
 }

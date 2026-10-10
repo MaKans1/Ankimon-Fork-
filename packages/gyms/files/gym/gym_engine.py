@@ -50,11 +50,16 @@ from ..poke_engine.objects import State, Side, StateMutator, TransposeInstructio
 from ..poke_engine.find_state_instructions import get_all_state_instructions
 from ..poke_engine.instruction_generator import get_instructions_from_switch
 from ..poke_engine.evaluate import evaluate
+from ..poke_engine.data import pokedex as _engine_dex
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STRUGGLE = "struggle"
 PLAN_ROLLOUTS = 3
 PLAN_HORIZON = 8
+TOTEM_WITHDRAW, TOTEM_RETURN = 0.30, 0.50      # Alola totems (gymsim.js does the same)
+TOTEM_STATS = (("atk", "attack_boost", "Attack"), ("def", "defense_boost", "Defense"),
+               ("spa", "special_attack_boost", "Sp. Atk"), ("spd", "special_defense_boost", "Sp. Def"),
+               ("spe", "speed_boost", "Speed"))
 SIDE_CONDITIONS = ("stealthrock", "spikes", "toxicspikes", "stickyweb", "tailwind",
                    "reflect", "lightscreen", "auroraveil", "protect", "safeguard", "mist")
 
@@ -180,7 +185,7 @@ class EngineBattle:
     """One gym fight. Combatants (gym_state) stay the HP/PP authority for the
     UI; the engine State is the authority for everything else."""
 
-    def __init__(self, player_team, leader_team, leader_label="The leader"):
+    def __init__(self, player_team, leader_team, leader_label="The leader", totem=None, titan=None):
         self.p_team = list(player_team)
         self.l_team = list(leader_team)
         self.leader_label = leader_label
@@ -188,6 +193,20 @@ class EngineBattle:
         self.state = State(self._side(self.p_team, self.by["user"]),
                            self._side(self.l_team, self.by["opponent"]),
                            None, None, False)
+        # Alola totem trial: the totem (named "Totem ...") + its reinforcements.
+        self.totem = dict(totem) if totem else None
+        self.totem_c = None
+        self.pending = []               # lines shown with the next turn
+        if self.totem:
+            self.totem_c = next((c for c in self.l_team if str(c.name).startswith("Totem ")), self.l_team[0])
+            if self.active("opponent") is self.totem_c:
+                self.pending += self._totem_aura("%s's aura flared to life!" % self.totem_c.name)
+        # Paldea Titan: alone; first faint -> Herba Mystica, full HP, power-up (gymsim.js titan*)
+        self.titan = dict(titan) if titan else None
+        self.titan_phase = 1
+        if self.titan and self.l_team:
+            self.pending += ["The Titan %s appeared!" % self.l_team[0].name]
+            self.pending += self._boost_active(self.titan.get("aura") or {}, "%s towers over you!" % self.l_team[0].name)
 
     # --- construction ------------------------------------------------
     @staticmethod
@@ -216,7 +235,16 @@ class EngineBattle:
             pk.moves = fixed
             pk.status = None
             if pk.id in by_id:
-                raise ValueError("duplicate species on one side: %s" % pk.id)
+                # Two of one species (Jasmine's Magnemite, Lance's Dragonite): the
+                # engine keys Pokemon by species, so the copy gets its own key,
+                # with the species' dex entry under it. (This used to refuse the
+                # team, and the fight never started.)
+                base, n = pk.id, 2
+                while "%scopy%d" % (base, n) in by_id:
+                    n += 1
+                pk.id = "%scopy%d" % (base, n)
+                if pk.id not in _engine_dex and base in _engine_dex:
+                    _engine_dex[pk.id] = _engine_dex[base]
             by_id[pk.id] = c
             mons.append(pk)
         sc = defaultdict(int, {k: 0 for k in SIDE_CONDITIONS})
@@ -252,16 +280,125 @@ class EngineBattle:
         """Resolve both moves, then any faints. Returns battle-log lines."""
         pm, lm = engine_id(p_move), engine_id(l_move)
         names = {"user": self._name("user"), "opponent": self._name("opponent")}
+        lines, self.pending = list(self.pending), []
+        ally = self.totem_withdrawal()
+        if ally:                        # the worn-down totem calls for help
+            lm = "%s %s" % (constants.SWITCH_STRING, ally)
+            lines.append("%s called for help!" % self.totem_c.name)
         with gym_moves():
             mut = StateMutator(self.state)
             outs = get_all_state_instructions(mut, pm, lm)
             o = random.choices(outs, weights=[x.percentage for x in outs])[0]
             mut.apply(o.instructions)
-            lines = self._describe(o.instructions, names)
+            held = self._totem_hold() or self._titan_hold()
+            said = self._describe(o.instructions, names)
+            if held:                    # it didn't faint after all: it held on
+                gone = "%s fainted" % (self.totem_c or self.l_team[0]).name   # totem or Titan
+                said = [x for x in said if gone not in x] + [held]
+            if ally:
+                called = self.by["opponent"][ally].name
+                said = [("%s answered the call!" % called) if x == "%s switched in!" % called else x
+                        for x in said]
+            lines += said
             self._sync()
+            lines += self._totem_down()
             lines += self._replace("opponent")
             lines += self._replace("user")
         return lines
+
+    # --- totems (Alola) -------------------------------------------------
+    def totem_withdrawal(self):
+        """Engine id of the reinforcement the totem calls this turn, or None:
+        the totem is out, at 30% HP or less, and help is left."""
+        if not self.totem or self.active("opponent") is not self.totem_c:
+            return None
+        t = self.totem_c
+        if t.hp <= 0 or t.hp > t.max_hp * TOTEM_WITHDRAW:
+            return None
+        nxt = self._totem_allies()
+        if not nxt:
+            return None
+        return next(k for k, v in self.by["opponent"].items() if v is nxt[0])
+
+    def _totem_hold(self):
+        """Anti one-shot: while it still has help to call, the totem can't
+        drop below 30% HP (or faint) - it holds there and calls for help next
+        turn. Returns the log line, or None. (gymsim.js totemLock.)"""
+        if not self.totem or not self._totem_allies():
+            return None
+        s = self._side_obj("opponent")
+        mon = next((m for m in [s.active] + list(s.reserve.values())
+                    if self.by["opponent"].get(m.id) is self.totem_c), None)
+        if mon is None:
+            return None
+        lock = max(1, int(mon.maxhp * TOTEM_WITHDRAW))
+        if mon.hp >= lock:
+            return None
+        mon.hp = lock
+        return "%s held on!" % self.totem_c.name
+
+    def _totem_allies(self, gone=None):
+        return [c for c in self.l_team if c is not self.totem_c and c is not gone and c.hp > 0
+                and self.active("opponent") is not c]
+
+    def _boost_active(self, boosts, msg):
+        """Raise the opponent's active Pokemon's stat stages; log lines."""
+        mon = self._side_obj("opponent").active
+        name = self.by["opponent"].get(mon.id).name if self.by["opponent"].get(mon.id) else "foe"
+        out = [msg]
+        for key, attr, label in TOTEM_STATS:
+            n = int((boosts or {}).get(key, 0) or 0)
+            if n:
+                before = getattr(mon, attr)
+                setattr(mon, attr, max(-6, min(6, before + n)))
+                if getattr(mon, attr) != before:
+                    out.append("The foe's %s's %s rose%s!" % (name, label, " sharply" if n >= 2 else ""))
+        return out
+
+    def _titan_hold(self):
+        """A Titan's first faint: it holds on, eats a Herba Mystica and comes back
+        at full HP with its power-up. Returns the log line, or None."""
+        if not self.titan or self.titan_phase != 1 or not self.l_team:
+            return None
+        s = self._side_obj("opponent")
+        mon = next((m for m in [s.active] + list(s.reserve.values())
+                    if self.by["opponent"].get(m.id) is self.l_team[0]), None)
+        if mon is None or mon.hp > 0:
+            return None
+        self.titan_phase = 2
+        mon.hp = mon.maxhp
+        name = self.l_team[0].name
+        self.pending += self._boost_active(self.titan.get("power") or {}, "") [1:]
+        return "%s ate a Herba Mystica and grew even stronger! Its HP was fully restored!" % name
+
+    def _totem_aura(self, msg):
+        mon = self._side_obj("opponent").active
+        out = [msg]
+        for key, attr, label in TOTEM_STATS:
+            n = int((self.totem or {}).get("aura", {}).get(key, 0) or 0)
+            if n:
+                before = getattr(mon, attr)
+                setattr(mon, attr, max(-6, min(6, before + n)))
+                if getattr(mon, attr) != before:
+                    out.append("The foe's %s's %s rose%s!" % (self.totem_c.name, label,
+                                                             " sharply" if n >= 2 else ""))
+        return out
+
+    def _totem_down(self):
+        """The totem fainting ends the trial: its reinforcements leave."""
+        if not self.totem or self.totem_c.hp > 0:
+            return []
+        rest = [c for c in self.l_team if c is not self.totem_c and c.hp > 0]
+        if not rest:
+            return []
+        s = self._side_obj("opponent")
+        for mon in [s.active] + list(s.reserve.values()):
+            if self.by["opponent"].get(mon.id) in rest:
+                mon.hp = 0
+        for c in rest:
+            c.hp = 0
+        self._sync()
+        return ["%s fainted - its allies fled!" % self.totem_c.name]
 
     def repair(self):
         """Bring in replacements for any fainted active Pokémon. Used if a turn
@@ -284,6 +421,11 @@ class EngineBattle:
             lines.append(("Your %s fainted!" if side == "user" else "%s fainted!")
                          % (gone.name if gone else "?"))
             nxt = next((c for c in team if c.hp > 0 and c is not gone), None)
+            if side == "opponent" and self.totem:
+                allies = self._totem_allies(gone)
+                nxt = allies[0] if allies else (self.totem_c if self.totem_c.hp > 0 and self.totem_c is not gone else None)
+                if allies:
+                    lines.append("%s called for help!" % self.totem_c.name)
             if nxt is None:
                 break
             nid = next(k for k, v in self.by[side].items() if v is nxt)
@@ -299,6 +441,19 @@ class EngineBattle:
                 s.active = s.reserve.pop(nid)
                 hz = []
             self._sync()
+            if side == "opponent" and self.totem:
+                if nxt is self.totem_c:
+                    half = int(nxt.max_hp * TOTEM_RETURN)
+                    if s.active.hp < half:
+                        s.active.hp = half
+                        self._sync()
+                    lines.append("%s is back in the fight!" % nxt.name)
+                    lines += self._totem_aura("%s's aura is still flaring!" % nxt.name)
+                else:
+                    lines.append("%s answered the call!" % nxt.name)
+                if hz:
+                    lines.append("%s was hurt by the hazards on its side!" % nxt.name)
+                continue
             lines.append(("Go, %s! (%d/%d HP)" if side == "user" else self.leader_label
                           + " sent out %s!") % ((nxt.name, nxt.hp, nxt.max_hp) if side == "user"
                                                 else (nxt.name,)))
@@ -321,7 +476,10 @@ class EngineBattle:
                     who[side] = c.name
                     out.append("%s switched in!" % c.name)
             elif kind == constants.MUTATOR_BOOST:
-                out.append("%s's %s %s!" % (label, _STAT_TEXT.get(ins[2], ins[2]), _amount(ins[3])))
+                n = int(ins[3])         # signed: Tail Whip is a boost of -1
+                if n:
+                    out.append("%s's %s %s!" % (label, _STAT_TEXT.get(ins[2], ins[2]),
+                                                _amount(n) if n > 0 else _drop(-n)))
             elif kind == constants.MUTATOR_UNBOOST:
                 out.append("%s's %s %s!" % (label, _STAT_TEXT.get(ins[2], ins[2]), _drop(ins[3])))
             elif kind == constants.MUTATOR_APPLY_STATUS:

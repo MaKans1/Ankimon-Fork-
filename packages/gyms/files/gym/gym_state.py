@@ -335,12 +335,55 @@ class GymProgress:
         because record_win() routes through record_attempt() first.
         """
         cadence = max(1, int(cadence))
+        try:                               # totems 2/3, kahunas right away (gym_data)
+            from .gym_data import gate_reviews
+            step = gate_reviews(gym, cadence)
+        except Exception:
+            step = cadence
+        try:                               # open world (Paldea): from your latest win there
+            from .gym_data import OPEN_WORLD, ladder
+            reg = getattr(gym, "region", "")
+            if reg in OPEN_WORLD:
+                wins = [int(r[3]) for r in (self._row(g.gym_id) for g in ladder(reg)) if r and r[1]]
+                return (max(wins) + step) if wins else step
+        except Exception:
+            pass
+        try:                               # the boss before this one in its ladder (Galar
+            from .gym_data import ladder   # versions share slots, so not simply id - 1)
+            lad = ladder(getattr(gym, "region", None))
+            ids = [g.gym_id for g in lad]
+            if gym.gym_id in ids:
+                k = ids.index(gym.gym_id)
+                if k == 0:
+                    return step
+                r = self._row(ids[k - 1])
+                return (int(r[3]) + step) if (r and r[1]) else step
+        except Exception:
+            pass
         prev_id = int(gym.gym_id) - 1
         if prev_id >= 1:
             r = self._row(prev_id)
             if r and r[1]:                 # previous gym defeated
-                return int(r[3]) + cadence
-        return cadence                     # first gym: cadence from baseline
+                return int(r[3]) + step
+        return step                        # first gym: from baseline
+
+    def migrate_ids(self, mapping, flag) -> int:
+        """One-time copy of progress rows to new gym ids, for a ladder that
+        was renumbered (Alola 2.0: the grand trials moved between totems)."""
+        key = "migrated_" + str(flag)
+        if self.get_meta(key):
+            return 0
+        n = 0
+        for old, new in mapping.items():
+            if self._row(old) is not None and self._row(new) is None:
+                self.db.execute(
+                    "INSERT INTO gym_progress (gym_id, defeated, attempts, last_attempt_rev, defeated_at) "
+                    "SELECT ?, defeated, attempts, last_attempt_rev, defeated_at FROM gym_progress WHERE gym_id=?",
+                    (int(new), int(old)))
+                n += 1
+        self._commit()
+        self.set_meta(key, "1")
+        return n
 
     def can_challenge(self, gym, review_count: int,
                       unlock_at=None, retry_cost=None):

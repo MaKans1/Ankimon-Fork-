@@ -32,11 +32,10 @@ PACED_KEYS = ("gym.reviews_per_gym", "gym.retry_cost_reviews",
 
 
 def gym_count() -> int:
-    try:
-        from ..gym import gym_data
-        return max(1, sum(len(v) for v in gym_data.LADDERS.values()))
-    except Exception:
-        return FALLBACK_GYMS
+    """Frozen at the 44 bosses the four-month target was set for: new ladders
+    don't shrink the intervals (pacing is to be reworked around gym battles
+    per day)."""
+    return FALLBACK_GYMS
 
 
 def cards_per_round(value) -> float:

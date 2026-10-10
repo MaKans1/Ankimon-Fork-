@@ -216,22 +216,10 @@ def simulate_battle_with_poke_engine(
             main_move = "Splash"
             enemy_move = "Splash"
 
-        # Wild mode survive rule: at full HP your Pokemon survives any single
-        # hit with 1 HP (the Sturdy effect). Only for this turn's outcomes.
-        _saved_ability = state.user.active.ability
-        try:
-            from ..wild import wild_rules as _wild
-            if _wild.survive_rule_applies(state.user.active):
-                state.user.active.ability = "sturdy"
-        except Exception:
-            pass
-        try:
-            # Get all possible outcomes
-            transpose_instructions = get_all_state_instructions(
-                mutator, main_move_normalized, enemy_move_normalized
-            )
-        finally:
-            state.user.active.ability = _saved_ability
+        # Get all possible outcomes
+        transpose_instructions = get_all_state_instructions(
+            mutator, main_move_normalized, enemy_move_normalized
+        )
 
         # Randomly select ONE outcome from possible outcomes, using probability weights for the outcomes in actual Pokemon battles
         # e.g. if P(outcome 1):P(outcome 2) = 20% : 80%, then 20% chance to pick outcome 1 (picks randomly)

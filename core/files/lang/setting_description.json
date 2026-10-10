@@ -64,7 +64,7 @@
     "battle.capture_xp_multiplier": "EXP for a catch, as a share of what defeating it would give (0.2 = a fifth, 0 = none).",
     "gym.elite_four_classic": "Face the Elite Four and Champion back to back with the same three Pokémon, healed between fights. Off: one at a time, like gyms.",
     "battle.show_battle_popups": "Show the battle log as popups while you review. Off: wild battles play out quietly.",
-    "battle.replace_duplicate_catches": "Catching a better copy of a species you own replaces yours (it keeps its team slot) instead of adding a duplicate.",
+    "battle.replace_duplicate_catches": "Catching a better copy of a species you own replaces yours (it keeps its team slot) instead of adding a duplicate. *Favorited Pokémon are never replaced. Pokémon that evolve in different ways (Eevee, Ralts, Tyrogue...) keep one copy per evolution: the best ones you find.",
     "battle.popup_damage": "The -12 HP / +8 HP numbers during wild battles. (Default: off)",
     "battle.popup_faint": "Messages when your Pokémon faints, a teammate is sent in, your whole team is worn out, or you flee. (Default: off)",
     "battle.popup_xp": "The XP gained message after a win or catch, including how the team split the EXP. (Default: off)",
@@ -72,7 +72,10 @@
     "battle.popup_catch": "The caught / upgraded / released message after a catch. (Default: off)",
     "battle.wild_levels_follow_badges": "Wild Pokémon get stronger as you earn badges in the region you're in. Off: they stay near your Pokémon's level.",
     "misc.region": "The region you are in: its wild Pokémon, gyms, wild levels and level cap. Change it from Ankimon > Game > Travel. (Default: Kanto)",
-    "battle.duplicate_level_window": "How close in level two copies must be for better IVs to beat a higher level when deciding which to keep.",
+    "battle.duplicate_level_window": "With Prioritize Average IV: how many levels apart two copies can be for better IVs to win. Beyond this, the higher level wins. Larger = IVs matter over a wider level range.",
     "gym.showdown_engine": "Gym battles follow the real games' rules. Off: a simpler engine.",
-    "gym.original_movesets": "Unticked (default) = Modernized, the more balanced choice. Ticked = Original: each leader's moves from their original games."
+    "gym.original_movesets": "Unticked (default) = Modernized, the more balanced choice. Ticked = Original: each leader's moves from their original games.",
+    "battle.upgrade_priority": "Which copy wins when you catch a species you already own. Prioritize Level: the higher level always wins (better IVs only break a tie). Prioritize Average IV: within the Duplicate Level Window below, better IVs win; beyond it, the higher level wins. *Favorited Pokémon are never replaced.",
+    "battle.popup_item_pickup": "The \"You received an item\" window when you find an item while reviewing. Off: the item still goes into your bag. (Default: on)",
+    "battle.popup_rematch": "A small notice when a gym rematch is ready (Ankimon > Game > Expeditions). (Default: on)"
 }

@@ -7,9 +7,11 @@ at your level; the GAP between your Pokemon and the boss sets the difficulty.
 
 RED/BLUE (from the pokered disassembly, Desktop/.claude/Ankimon/showdown_proto/rb)
     Every leader uses their real Red/Blue Pokemon at their real levels - the ace
-    plus the next two highest (Brock and Misty only ever had two). Recommended
-    level = the ace's level, so a fight at the recommended level is level for
-    level, like the originals. Blue's team is the Charizard version.
+    plus the next two highest (Brock and Misty only ever had two). Blue's team
+    is the Charizard version. Recommended level = where three type-matched
+    Pokemon win ~85% on Showdown's rules (balance_sim/rec_levels.py, like every
+    other region): a few levels under the ace for most leaders, above it for
+    Misty, Sabrina, Lance and Blue.
     moves    = Modernized: the 2 best attacks + 2 best support moves each
                Pokemon learns by that level (the default; with Pokemon
                Showdown's rules a type-matched team at level wins ~89%,
@@ -45,6 +47,11 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 GYM, ELITE4, CHAMPION = "gym", "elite4", "champion"
+TITAN = "titan"         # Paldea's Titans: optional bosses, no badge (gym/paldea.py)
+# Regions whose gyms can be done in any order ("Where to next?", gym/paldea.py).
+# Filled in below once the region's data has its per-tier teams (the full
+# Paldea build), so an older regions_data keeps the linear ladder.
+OPEN_WORLD = set()
 
 
 @dataclass
@@ -80,10 +87,56 @@ class Gym:
     # GymProgress.unlock_point(), which measures from the previous win.
     unlock_at_reviews: int = 100
     region: str = "Kanto"
+    # How long after the previous boss this one opens (gate_reviews): a normal
+    # "gym" interval; Alola's "totem" trials at 2/3 of it; a "kahuna" grand
+    # trial right after its island's last totem.
+    gate: str = "gym"
+    # Totem battles (Alola): {"aura": {"def": 1, ...}, "captain": "Ilima"}.
+    # The team is the totem + its reinforcements (gym_battle / gymsim.js).
+    totem: Optional[dict] = None
+    z_crystal: str = ""         # item for the first win (Alola: "normalium-z" ...)
+    # Galar: the leader's ace (last Pokemon) Dynamaxes ("dynamax") or
+    # Gigantamaxes ("gmax") - dmax.py / gymsim.js dmaxLeader. "" = never.
+    dynamax: str = ""
+    # Paldea: the leader's ace Terastallizes into this type ("Bug", "Ice" ...).
+    tera: str = ""
+    # Paldea Titan ({"aura": {...}, "power": {...}}): the Titan alone; at its first
+    # faint it eats a Herba Mystica and comes back at full HP, powered up.
+    titan: Optional[dict] = None
+    # Open world (Paldea): the team for the n-th gym / Titan you do {n: [GymMon]},
+    # so levels follow the order you choose (gym/paldea.py picks the tier).
+    tiers: Optional[dict] = None
+    # Galar: a Sword / Shield leader ("sword" / "shield") and the other version's
+    # leader in the same slot (gym_id). The ladder shows the version you chose
+    # (gym/galar.py); the other is still there for rematches.
+    version: str = ""
+    pair: int = 0
 
     @property
     def is_elite(self) -> bool:
         return self.kind in (ELITE4, CHAMPION)
+
+    @property
+    def is_totem(self) -> bool:
+        return bool(self.totem)
+
+    @property
+    def is_titan(self) -> bool:
+        return bool(self.titan)
+
+
+TOTEM_SHARE = 2 / 3     # totem trials open after 2/3 of the gym interval
+
+
+def gate_reviews(gym, cadence: int) -> int:
+    """Cards between the previous boss's win and this one opening."""
+    cadence = max(1, int(cadence))
+    gate = getattr(gym, "gate", "gym")
+    if gate == "kahuna":
+        return 0
+    if gate == "totem":
+        return max(1, int(round(cadence * TOTEM_SHARE)))
+    return cadence
 
 
 # --- The ladder ------------------------------------------------------------
@@ -96,7 +149,7 @@ GYMS: List[Gym] = [
                 rb_moves=["Tackle", "Defense Curl"]),
          GymMon("Onix", 14, ["Smack Down", "Rock Throw", "Rock Polish", "Harden"],
                 rb_moves=["Tackle", "Screech", "Bide"])],
-        cash_reward=500, unlock_at_reviews=100),
+        cash_reward=500, recommended_level=10, unlock_at_reviews=100),
 
     Gym(2, "Cerulean Gym", "Misty", "Water", "Cascade Badge",
         "Fast, bulky water types. Electric and grass moves will carry you; "
@@ -105,7 +158,7 @@ GYMS: List[Gym] = [
                 rb_moves=["Tackle", "Water Gun"]),
          GymMon("Starmie", 21, ["Psychic", "Surf", "Recover", "Cosmic Power"],
                 rb_moves=["Tackle", "Water Gun", "Bubble Beam"])],
-        cash_reward=800, unlock_at_reviews=200),
+        cash_reward=800, recommended_level=22, unlock_at_reviews=200),
 
     Gym(3, "Vermilion Gym", "Lt. Surge", "Electric", "Thunder Badge",
         "High speed and paralysis. Ground types ignore electric entirely — "
@@ -116,7 +169,7 @@ GYMS: List[Gym] = [
                 rb_moves=["Thunder Shock", "Growl", "Thunder Wave", "Quick Attack"]),
          GymMon("Raichu", 24, ["Thunderbolt", "Discharge", "Agility", "Nasty Plot"],
                 rb_moves=["Thunder Shock", "Growl", "Thunderbolt"])],
-        cash_reward=1200, unlock_at_reviews=300),
+        cash_reward=1200, recommended_level=20, unlock_at_reviews=300),
 
     Gym(4, "Celadon Gym", "Erika", "Grass", "Rainbow Badge",
         "Grass types with status moves that stall. Fire, flying and ice cut "
@@ -127,7 +180,7 @@ GYMS: List[Gym] = [
                 rb_moves=["Constrict", "Bind"]),
          GymMon("Vileplume", 29, ["Petal Dance", "Petal Blizzard", "Moonlight", "Growth"],
                 rb_moves=["Petal Dance", "Poison Powder", "Mega Drain", "Sleep Powder"])],
-        cash_reward=1600, unlock_at_reviews=400),
+        cash_reward=1600, recommended_level=27, unlock_at_reviews=400),
 
     Gym(5, "Fuchsia Gym", "Koga", "Poison", "Soul Badge",
         "Poison and residual damage. Bring something that resists toxic, or "
@@ -138,7 +191,7 @@ GYMS: List[Gym] = [
                 rb_moves=["Tackle", "Smog", "Sludge", "Smokescreen"]),
          GymMon("Weezing", 43, ["Self-Destruct", "Sludge Bomb", "Sludge", "Poison Gas"],
                 rb_moves=["Smog", "Sludge", "Toxic", "Self-Destruct"])],
-        cash_reward=2000, unlock_at_reviews=500),
+        cash_reward=2000, recommended_level=39, unlock_at_reviews=500),
 
     Gym(6, "Saffron Gym", "Sabrina", "Psychic", "Marsh Badge",
         "Very high special attack and speed. Dark and bug moves are your best "
@@ -149,7 +202,7 @@ GYMS: List[Gym] = [
                 rb_moves=["Poison Powder", "Leech Life", "Stun Spore", "Psybeam"]),
          GymMon("Alakazam", 43, ["Psychic", "Psyshock", "Recover", "Reflect"],
                 rb_moves=["Psybeam", "Recover", "Psywave", "Reflect"])],
-        cash_reward=2500, unlock_at_reviews=600),
+        cash_reward=2500, recommended_level=44, unlock_at_reviews=600),
 
     Gym(7, "Cinnabar Gym", "Blaine", "Fire", "Volcano Badge",
         "Heavy fire damage and burn chances. Water, rock and ground types "
@@ -160,7 +213,7 @@ GYMS: List[Gym] = [
                 rb_moves=["Tail Whip", "Stomp", "Growl", "Fire Spin"]),
          GymMon("Arcanine", 47, ["Flare Blitz", "Flamethrower", "Agility", "Howl"],
                 rb_moves=["Roar", "Ember", "Fire Blast", "Take Down"])],
-        cash_reward=3000, unlock_at_reviews=700),
+        cash_reward=3000, recommended_level=43, unlock_at_reviews=700),
 
     Gym(8, "Viridian Gym", "Giovanni", "Ground", "Earth Badge",
         "Ground types with real bulk and the last badge on the line. Water, "
@@ -171,7 +224,7 @@ GYMS: List[Gym] = [
                 rb_moves=["Tackle", "Horn Attack", "Poison Sting", "Thrash"]),
          GymMon("Rhydon", 50, ["Earthquake", "Drill Run", "Bulldoze", "Scary Face"],
                 rb_moves=["Stomp", "Tail Whip", "Fissure", "Horn Drill"])],
-        cash_reward=4000, unlock_at_reviews=800),
+        cash_reward=4000, recommended_level=46, unlock_at_reviews=800),
 
     # --- Elite Four -------------------------------------------------------
     Gym(9, "Elite Four", "Lorelei", "Ice", "Elite Four: Lorelei",
@@ -183,7 +236,7 @@ GYMS: List[Gym] = [
                 rb_moves=["Double Slap", "Ice Punch", "Body Slam", "Thrash"]),
          GymMon("Lapras", 56, ["Ice Beam", "Hydro Pump", "Brine", "Life Dew"],
                 rb_moves=["Body Slam", "Confuse Ray", "Blizzard", "Hydro Pump"])],
-        cash_reward=5000, kind=ELITE4, unlock_at_reviews=900),
+        cash_reward=5000, kind=ELITE4, recommended_level=56, unlock_at_reviews=900),
 
     Gym(10, "Elite Four", "Bruno", "Fighting", "Elite Four: Bruno",
         "Pure physical pressure. Psychic and flying moves are the classic "
@@ -194,7 +247,7 @@ GYMS: List[Gym] = [
                 rb_moves=["Rock Throw", "Rage", "Slam", "Harden"]),
          GymMon("Machamp", 58, ["Vital Throw", "Low Sweep", "Bulk Up", "Scary Face"],
                 rb_moves=["Leer", "Focus Energy", "Fissure", "Submission"])],
-        cash_reward=5500, kind=ELITE4, unlock_at_reviews=1000),
+        cash_reward=5500, kind=ELITE4, recommended_level=54, unlock_at_reviews=1000),
 
     Gym(11, "Elite Four", "Agatha", "Ghost", "Elite Four: Agatha",
         "Ghost and poison with status spam. Dark and psychic moves hit hard; "
@@ -205,7 +258,7 @@ GYMS: List[Gym] = [
                 rb_moves=["Bite", "Glare", "Screech", "Acid"]),
          GymMon("Gengar", 60, ["Shadow Ball", "Dream Eater", "Curse", "Hypnosis"],
                 rb_moves=["Confuse Ray", "Night Shade", "Toxic", "Dream Eater"])],
-        cash_reward=6000, kind=ELITE4, unlock_at_reviews=1100),
+        cash_reward=6000, kind=ELITE4, recommended_level=56, unlock_at_reviews=1100),
 
     Gym(12, "Elite Four", "Lance", "Dragon", "Elite Four: Lance",
         "Dragons with huge stats across the board. Ice moves are the answer "
@@ -216,7 +269,7 @@ GYMS: List[Gym] = [
                 rb_moves=["Supersonic", "Bite", "Take Down", "Hyper Beam"]),
          GymMon("Dragonite", 62, ["Outrage", "Hurricane", "Dragon Dance", "Agility"],
                 rb_moves=["Agility", "Slam", "Barrier", "Hyper Beam"])],
-        cash_reward=7000, kind=ELITE4, unlock_at_reviews=1200),
+        cash_reward=7000, kind=ELITE4, recommended_level=67, unlock_at_reviews=1200),
 
     Gym(13, "Champion", "Blue", "Mixed", "Champion",
         "No type theme to exploit — a balanced team at the highest levels on "
@@ -227,7 +280,7 @@ GYMS: List[Gym] = [
                 rb_moves=["Dragon Rage", "Leer", "Hydro Pump", "Hyper Beam"]),
          GymMon("Charizard", 65, ["Flare Blitz", "Flamethrower", "Heat Wave", "Scary Face"],
                 rb_moves=["Rage", "Slash", "Flamethrower", "Fire Spin"])],
-        cash_reward=10000, kind=CHAMPION, unlock_at_reviews=1300),
+        cash_reward=10000, kind=CHAMPION, recommended_level=69, unlock_at_reviews=1300),
 ]
 
 
@@ -248,8 +301,12 @@ def unlock_reviews(gym) -> int:
 # You are always in exactly one region (Ankimon > Game > Travel); the ladder,
 # badges, wild levels and level cap all follow it.
 from .regions_data import REGION_GYMS  # noqa: E402
+OPEN_WORLD.update(r for r in ("Paldea",) if any(getattr(g, "tiers", None) for g in REGION_GYMS.get(r, [])))
 
 REGION_ORDER = ["Kanto", "Johto", "Hoenn", "Sinnoh", "Unova", "Kalos", "Alola", "Galar", "Paldea"]
+# Alola's grand trials were 701-703; the USUM ladder (721-737) puts them
+# between the totems. Wins carry over once (gym_ui.progress).
+ALOLA_MIGRATION = {701: 722, 702: 726, 703: 729}
 LADDERS = {"Kanto": GYMS, **REGION_GYMS}
 for _region, _gyms in LADDERS.items():
     for _g in _gyms:
@@ -266,8 +323,44 @@ def current_region() -> str:
         return "Kanto"
 
 
-def ladder(region: Optional[str] = None) -> List[Gym]:
+# Regions with Sword / Shield style leaders, and the default before you choose
+VERSIONS = {"Galar": ("sword", "shield")}
+_VERSION = {}            # region -> chosen version (gym/galar.py keeps it up to date)
+_VERSION_BUSY = [False]
+
+
+def chosen_version(region) -> str:
+    """The version picked for this region ("sword" until you choose)."""
+    if region in _VERSION:
+        return _VERSION[region]
+    default = VERSIONS.get(region, ("",))[0]
+    if _VERSION_BUSY[0]:
+        return default
+    _VERSION_BUSY[0] = True
+    try:
+        from .gym_ui import progress
+        v = progress().get_meta("version:" + region)
+    except Exception:
+        v = None                     # outside Anki (tools): the default
+    finally:
+        _VERSION_BUSY[0] = False
+    _VERSION[region] = v or default
+    return _VERSION[region]
+
+
+def full_ladder(region: Optional[str] = None) -> List[Gym]:
+    """Every boss of a region, both versions' leaders included."""
     return LADDERS.get(region or current_region(), GYMS)
+
+
+def ladder(region: Optional[str] = None) -> List[Gym]:
+    """The region's ladder as you play it (Galar: your version's leaders)."""
+    reg = region or current_region()
+    lad = LADDERS.get(reg, GYMS)
+    if reg in VERSIONS and any(g.version for g in lad):
+        v = chosen_version(reg)
+        lad = [g for g in lad if not g.version or g.version == v]
+    return lad
 
 
 def get_gym(gym_id: int) -> Optional[Gym]:
@@ -278,15 +371,25 @@ def get_gym(gym_id: int) -> Optional[Gym]:
 
 
 def next_gym(defeated_ids, region: Optional[str] = None) -> Optional[Gym]:
-    """The next boss not yet beaten in this region. Linear path: no skipping."""
-    for g in ladder(region):
-        if g.gym_id not in defeated_ids:
+    """The next boss not yet beaten in this region. Linear path: no skipping.
+    Open-world regions (Paldea): the gym or Titan you chose in "Where to next?",
+    at the level tier of the order you're doing them in (gym/paldea.py)."""
+    reg = region or current_region()
+    if reg in OPEN_WORLD:
+        try:
+            from . import paldea
+            return paldea.next_boss(defeated_ids, reg)
+        except ImportError:
+            pass                    # outside Anki (tools): the linear order below
+    for g in ladder(reg):
+        if g.kind != TITAN and g.gym_id not in defeated_ids:
             return g
     return None
 
 
 def ladder_complete(defeated_ids, region: Optional[str] = None) -> bool:
-    return all(g.gym_id in defeated_ids for g in ladder(region))
+    """Every boss beaten (Titans are optional and don't count)."""
+    return all(g.gym_id in defeated_ids for g in ladder(region) if g.kind != TITAN)
 
 
 def elite_run(gym) -> List[Gym]:

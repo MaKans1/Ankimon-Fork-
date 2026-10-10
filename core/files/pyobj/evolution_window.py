@@ -46,6 +46,22 @@ from ..resources import (
 )
 
 
+def _register_in_dex():
+    """Ankimon 2.0: an evolved species goes into the Pokédex at once (region
+    Pokédex badges are checked too) and an open Pokédex window refreshes."""
+    try:
+        from ..wild import dex
+        dex.sync_and_award()
+    except Exception:
+        pass
+    try:
+        from ..singletons import pokedex_window
+        if pokedex_window.isVisible():
+            pokedex_window.load_html()
+    except Exception:
+        pass
+
+
 class EvoWindow(QWidget):
     def __init__(
         self,
@@ -99,7 +115,7 @@ class EvoWindow(QWidget):
         close_button = QPushButton("Close")
         qconnect(close_button.clicked, self.close)
         layout.addWidget(close_button)
-        self.setStyleSheet("background-color: rgb(14,14,14);")
+        self.setStyleSheet("background-color: rgb(14,14,14); color: rgb(240,240,240);")
         self.setLayout(layout)
         self.setMaximumWidth(500)
         self.setMaximumHeight(300)
@@ -185,7 +201,7 @@ class EvoWindow(QWidget):
         layout.addWidget(pokemon_images)
         layout.addWidget(evolve_button)
         layout.addWidget(dont_evolve_button)
-        self.setStyleSheet("background-color: rgb(44,44,44);")
+        self.setStyleSheet("background-color: rgb(44,44,44); color: rgb(240,240,240);")
         self.setLayout(layout)
         self.show()
 
@@ -382,6 +398,7 @@ class EvoWindow(QWidget):
 
             # Save to database
             db.save_pokemon(pokemon)
+            _register_in_dex()
             self.logger.log_and_showinfo("info", self.translator.translate("mainpokemon_has_evolved", prevo_name=prevo_name, evo_name=evo_name))
         except Exception as e:
             show_warning_with_traceback(

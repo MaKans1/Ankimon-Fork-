@@ -130,10 +130,11 @@ def find_experience_for_level(group_growth_rate, level, remove_levelcap=True):
             experience = ((5 * ((level+1) ** 3)) // 4) - ((5 * (level ** 3)) // 4)
         return experience
 
-def shiny_chance():
-    # Shiny Pokémon probability (1 in 4096 chance)
+def shiny_chance(boost=1):
+    # Shiny Pokémon probability (1 in 4096 chance); boost = multiplier
+    # (Herba Mystica, Kubfu - wild_rules.shiny_boost)
     SHINY_PROBABILITY = 4096
-    shiny = random.randint(1, SHINY_PROBABILITY) == 1
+    shiny = random.randint(1, max(1, SHINY_PROBABILITY // max(1, int(boost or 1)))) == 1
     return shiny
 
 # unused, archived

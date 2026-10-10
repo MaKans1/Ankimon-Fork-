@@ -16,7 +16,9 @@ from typing import List, Optional
 
 from .gym_data import GymMon
 
-BIRD_LEVEL = 50
+# Each bird's level: three Pokemon with a type advantage, at the level cap when
+# the birds open (Lv 48), win ~75% against its moves below (balance_sim NOTES.md).
+BIRD_LEVELS = {"Zapdos": 51, "Articuno": 58, "Moltres": 57}
 BIRD_BADGES = 5
 
 
@@ -38,6 +40,23 @@ class Expedition:
     blurb: str
     floors: List[Floor] = field(default_factory=list)
     region: str = "Kanto"       # you must be here, with this region's badges
+    # The original games' conditions, as "you own it" checks on dex numbers
+    # (the games wanted them in your party):
+    needs_owned: tuple = ()     # every one, e.g. (321, 369) Wailord + Relicanth for the Regis
+    needs_any: tuple = ()       # at least one, e.g. (382, 383) Kyogre or Groudon for Rayquaza
+    needs_champion: bool = False  # this region's Champion beaten
+    needs_done: str = ""        # another expedition finished first (its key)
+    # A release expedition has no legendary to catch: finishing it sets these
+    # dex numbers roaming (gym/legends.py), e.g. Burned Tower -> Raikou, Entei.
+    releases: tuple = ()
+    # Galar / Paldea:
+    excludes: str = ""          # the other half of a pair (Zacian / Zamazenta): finish one and
+                                # the other closes - its legendary roams instead (gym/legends.py)
+    needs_items: tuple = ()     # (("yellow-stake", 4),): that many in your bag (Paldea's shrines)
+    evolves: tuple = ()         # (from dex, to dex, to name): no legendary at the top - clearing
+                                # it evolves one you pick (Kubfu -> Urshifu in the Galar towers)
+    repeatable: bool = False    # never "done": set out again for the next one
+    unlocks: str = ""           # a place it opens for good when finished ("area_zero")
 
     @property
     def boss(self) -> Optional[Floor]:
@@ -56,15 +75,15 @@ EXPEDITIONS: List[Expedition] = [
                 GymMon("Pikachu", 36, ["Thunderbolt", "Iron Tail", "Quick Attack", "Thunder Wave"])],
                cash=300),
          Floor("Turbine Room",
-               [GymMon("Magneton", 39, ["Electro Ball", "Flash Cannon", "Tri Attack", "Thunder Wave"]),
-                GymMon("Electabuzz", 40, ["Thunder Punch", "Low Kick", "Discharge", "Screech"])],
+               [GymMon("Magneton", 36, ["Electro Ball", "Flash Cannon", "Tri Attack", "Thunder Wave"]),
+                GymMon("Electabuzz", 37, ["Thunder Punch", "Low Kick", "Discharge", "Screech"])],
                cash=400),
          Floor("Generator Core",
                [GymMon("Electrode", 43, ["Discharge", "Swift", "Light Screen", "Self-Destruct"]),
                 GymMon("Electrode", 43, ["Electro Ball", "Charge Beam", "Screech", "Self-Destruct"])],
                cash=500),
          Floor("Zapdos",
-               [GymMon("Zapdos", BIRD_LEVEL, ["Discharge", "Drill Peck", "Roost", "Agility"],
+               [GymMon("Zapdos", BIRD_LEVELS["Zapdos"], ["Discharge", "Drill Peck", "Roost", "Agility"],
                        rb_moves=["Thunder Shock", "Drill Peck"])],
                cash=0, boss=True)]),
 
@@ -83,12 +102,12 @@ EXPEDITIONS: List[Expedition] = [
                 GymMon("Kingler", 39, ["Razor Shell", "Hammer Arm", "Metal Claw", "Mud Shot"])],
                cash=400),
          Floor("Frozen Depths",
-               [GymMon("Slowbro", 42, ["Surf", "Psychic", "Slack Off", "Amnesia"]),
-                GymMon("Golduck", 42, ["Hydro Pump", "Zen Headbutt", "Aqua Tail", "Screech"]),
-                GymMon("Dewgong", 43, ["Aurora Beam", "Brine", "Take Down", "Icy Wind"])],
+               [GymMon("Slowbro", 39, ["Surf", "Psychic", "Slack Off", "Amnesia"]),
+                GymMon("Golduck", 39, ["Hydro Pump", "Zen Headbutt", "Aqua Tail", "Screech"]),
+                GymMon("Dewgong", 40, ["Aurora Beam", "Brine", "Take Down", "Icy Wind"])],
                cash=500),
          Floor("Articuno",
-               [GymMon("Articuno", BIRD_LEVEL, ["Ice Beam", "Ancient Power", "Roost", "Agility"],
+               [GymMon("Articuno", BIRD_LEVELS["Articuno"], ["Ice Beam", "Ancient Power", "Roost", "Agility"],
                        rb_moves=["Peck", "Ice Beam"])],
                cash=0, boss=True)]),
 
@@ -107,12 +126,12 @@ EXPEDITIONS: List[Expedition] = [
                 GymMon("Marowak", 40, ["Bone Rush", "Stomping Tantrum", "Headbutt", "Focus Energy"])],
                cash=400),
          Floor("Summit Cave",
-               [GymMon("Machoke", 43, ["Vital Throw", "Knock Off", "Bulk Up", "Low Sweep"]),
-                GymMon("Venomoth", 43, ["Bug Buzz", "Psybeam", "Sleep Powder", "Quiver Dance"]),
-                GymMon("Graveler", 43, ["Earthquake", "Rock Blast", "Rock Polish", "Self-Destruct"])],
+               [GymMon("Machoke", 39, ["Vital Throw", "Knock Off", "Bulk Up", "Low Sweep"]),
+                GymMon("Venomoth", 39, ["Bug Buzz", "Psybeam", "Sleep Powder", "Quiver Dance"]),
+                GymMon("Graveler", 39, ["Earthquake", "Rock Blast", "Rock Polish", "Self-Destruct"])],
                cash=500),
          Floor("Moltres",
-               [GymMon("Moltres", BIRD_LEVEL, ["Heat Wave", "Air Slash", "Roost", "Agility"],
+               [GymMon("Moltres", BIRD_LEVELS["Moltres"], ["Heat Wave", "Air Slash", "Roost", "Agility"],
                        rb_moves=["Peck", "Fire Spin"])],
                cash=0, boss=True)]),
 ]

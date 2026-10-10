@@ -143,15 +143,74 @@ def flee(message=None):
 
 
 # ------------------------------------------------------ buddy menu ----
+class _SavedMon:
+    """A saved Pokémon that isn't your active buddy, shaped like the buddy
+    object BuddyMenu reads (Game > Choose Pokémon Team, right-click)."""
+
+    def __init__(self, rec):
+        rec = rec or {}
+        self.individual_id = rec.get("individual_id")
+        self.name = rec.get("name") or "?"
+        self.nickname = rec.get("nickname")
+        self.level = int(rec.get("level") or 1)
+        self.id = rec.get("id")
+        self.shiny = bool(rec.get("shiny"))
+        self.type = rec.get("type") or []
+        self.attacks = list(rec.get("attacks") or [])
+        self.held_item = rec.get("held_item")
+        stats = rec.get("stats") or {}
+        self.max_hp = int(stats.get("hp") or rec.get("hp") or 1)
+        cur = rec.get("current_hp")
+        self.hp = int(self.max_hp if cur is None else cur)
+        self.battle_status = None
+        self.stat_stages = {}
+
+
 class BuddyMenu(QDialog):
-    def __init__(self, parent=None):
+    """Your Pokémon: moves, held item, Switch In / Flee. iid = any saved
+    Pokémon (default: your active buddy); context "team" = opened from the
+    team window, where Switch In and Flee don't apply."""
+
+    def __init__(self, parent=None, iid=None, context="wild"):
         super().__init__(parent or mw)
         self.setWindowTitle("Your Pokémon")
         self.setMinimumWidth(460)
+        self.iid, self.context = iid, context
         self.lay = QVBoxLayout(self)
         self.body = None
         self.note_text = ""
         self._build()
+
+    def _is_buddy(self):
+        mp = _S().main_pokemon
+        return self.iid is None or self.iid == getattr(mp, "individual_id", None)
+
+    def _mon(self):
+        """The Pokémon shown: your buddy (live object) or a saved one."""
+        if self._is_buddy():
+            return _S().main_pokemon
+        return _SavedMon(mw.ankimon_db.get_pokemon(self.iid))
+
+    def _held_line(self, mp):
+        item = getattr(mp, "held_item", None)
+        if not item:
+            return "Held item: none"
+        try:
+            from ..utils import item_display_name
+            label = item_display_name(item)
+        except Exception:
+            label = str(item).replace("-", " ").title()
+        try:
+            from ..gym import zmoves
+            t = zmoves.crystal_type(item)
+            if t:
+                if zmoves.can_use_crystal({"attacks": list(mp.attacks or [])}, item):
+                    label += " ✦ (Z-Move ready in gym battles)"
+                else:
+                    label += " (no %s-type move, so no Z-Move)" % t
+        except Exception:
+            pass
+        return "Held item: " + label
 
     # --- layout ---
     def _build(self):
@@ -161,7 +220,7 @@ class BuddyMenu(QDialog):
         self.body = QWidget()
         v = QVBoxLayout(self.body)
         v.setContentsMargins(0, 0, 0, 0)
-        mp = _S().main_pokemon
+        mp = self._mon()
         star = " ★" if getattr(mp, "shiny", False) else ""
         v.addWidget(QLabel("<b style='font-size:15px'>%s%s</b> &nbsp; Lv %s &nbsp; "
                            "<span style='color:gray'>%s</span>" % (_name(mp), star, mp.level, _types(mp))))
@@ -174,6 +233,7 @@ class BuddyMenu(QDialog):
         if st:
             hp_line += "   |   " + st
         v.addWidget(QLabel(hp_line))
+        v.addWidget(QLabel(self._held_line(mp)))
         team_line = self._team_line()
         if team_line:
             v.addWidget(_small(team_line))
@@ -191,6 +251,12 @@ class BuddyMenu(QDialog):
             cb = QCheckBox(name)
             cb.setChecked(W.move_enabled(iid, mv))
             cb.setToolTip(tip)
+            if W.wild_unsupported(mv):
+                # charge-up / lock-in / no-effect-here: gyms only
+                cb.setEnabled(False)
+                cb.setText(name + "  (gyms only)")
+                cb.setToolTip("Not used in wild battles - it needs more than one turn or has no "
+                              "effect there. It works normally in gym battles.<br><br>" + tip)
             cb.toggled.connect(lambda on, m=mv, box=cb: self._toggle(m, on, box))
             self.boxes.append(cb)
             info = _small(detail)
@@ -215,13 +281,16 @@ class BuddyMenu(QDialog):
         v.addWidget(_hline())
 
         row2 = QHBoxLayout()
+        wild = self.context != "team"          # Switch In / Flee: wild battles only
         b = QPushButton("Switch In...")
+        b.setVisible(wild)
         b.setToolTip("Send in a team member for this fight. Your buddy is back "
                      "in front when the fight ends. (Change your buddy for good "
                      "in Game > Choose Pokémon Team.)")
         b.clicked.connect(self._switch)
         row2.addWidget(b)
         b = QPushButton("Flee")
+        b.setVisible(wild)
         b.setToolTip("Free - a new wild Pokémon appears")
         b.clicked.connect(self._flee)
         row2.addWidget(b)
@@ -243,7 +312,7 @@ class BuddyMenu(QDialog):
 
     # --- actions ---
     def _toggle(self, move, on, box):
-        mp = _S().main_pokemon
+        mp = self._mon()
         if not on and not any(b.isChecked() for b in self.boxes):
             box.blockSignals(True)
             box.setChecked(True)
@@ -257,6 +326,8 @@ class BuddyMenu(QDialog):
             self._say("Could not save that: %s" % e)
 
     def _sync_moves(self):
+        if not self._is_buddy():
+            return                      # a saved Pokémon is re-read on every _build
         S = _S()
         mp = S.main_pokemon
         try:
@@ -268,7 +339,7 @@ class BuddyMenu(QDialog):
 
     def _forget(self, move):
         S = _S()
-        mp = S.main_pokemon
+        mp = self._mon()
         if len(mp.attacks or []) <= 1:
             self._say("It can't forget its last move.")
             return
@@ -285,7 +356,7 @@ class BuddyMenu(QDialog):
 
     def _remember(self):
         S = _S()
-        mp = S.main_pokemon
+        mp = self._mon()
         from ..functions.pokedex_functions import get_all_pokemon_moves
         from ..gui_classes.pokemon_details import remember_attack_details_window
         remember_attack_details_window(mp.individual_id, list(mp.attacks),
@@ -295,7 +366,7 @@ class BuddyMenu(QDialog):
 
     def _tm(self):
         S = _S()
-        mp = S.main_pokemon
+        mp = self._mon()
         from ..gui_classes.pokemon_details import tm_attack_details_window
         tm_attack_details_window(mp.id, mp.individual_id, list(mp.attacks), S.logger)
         self._sync_moves()
@@ -344,7 +415,7 @@ class BuddyMenu(QDialog):
 
     def _team_line(self):
         try:
-            cur = _S().main_pokemon.individual_id
+            cur = self._mon().individual_id
             bits = []
             for iid in W.party():
                 p = mw.ankimon_db.get_pokemon(iid) or {}
@@ -419,7 +490,7 @@ class WildInfo(QDialog):
         bd = W.band()
         if bd:
             b, lo, hi = bd
-            area = "Lv %d-%d with %s" % (lo, hi, "the champion beaten" if b == 9
+            area = "Lv %d-%d with %s" % (lo, hi, "the champion beaten" if W.is_champion(b)
                                          else "%d badge%s" % (b, "" if b == 1 else "s"))
             if int(ep.level) > hi:
                 area += " - this one is unusually strong!"
@@ -459,6 +530,19 @@ class WildInfo(QDialog):
 
 
 # ------------------------------------------------------------ wiring ----
+def open_pokemon(iid, parent=None):
+    """'Your Pokémon' for any saved Pokémon (Game > Choose Pokémon Team:
+    right-click a sprite). Returns after the window closes."""
+    try:
+        BuddyMenu(parent or mw, iid=iid, context="team").exec()
+    except Exception as e:
+        try:
+            from ..pyobj.error_handler import show_warning_with_traceback
+            show_warning_with_traceback(parent=mw, exception=e, message="Ankimon Your Pokémon:")
+        except Exception:
+            print("Ankimon Your Pokémon error:", e)
+
+
 def open_menu(what):
     if _open["dlg"] is not None:
         return                                  # one at a time (double clicks)
@@ -489,12 +573,17 @@ def _on_js_message(handled, message, context):
 def travel(name):
     """Go to another region: its wild Pokémon, gyms, levels and level cap."""
     from aqt.utils import tooltip
-    if name == W.region():
+    place = W.AREA_ZERO if name == W.AREA_ZERO_NAME else ""
+    if place:
+        name = "Paldea"                        # Area Zero is inside Paldea
+    if name == W.region() and place == W.area():
         return
     if _gym_active():
         tooltip("Finish the battle you're in before travelling.")
         return
+    entering = name != W.region()
     W.set_region(name)
+    W.set_area(place)
     S = _S()
     try:
         from ..functions.encounter_functions import new_pokemon
@@ -505,9 +594,26 @@ def travel(name):
     _refresh_hud()
     cap = W.level_cap()
     b = W.badges() or 0
+    if place:
+        tooltip("Welcome to Area Zero! Paradox Pokémon roam the Great Crater.", period=5000)
+        return
     tooltip("Welcome to %s! %s badge%s here%s." % (
-        name, b if b < 9 else "All", "" if b == 1 else "s",
+        name, b if not W.is_champion(b) else "All", "" if b == 1 else "s",
         (" - your Pokémon fight at up to Lv %d" % cap) if cap else ""), period=5000)
+    if not entering:                           # back up out of Area Zero
+        return
+    if name == "Paldea":                       # open world: "Where to next?"
+        try:
+            from ..gym import paldea
+            paldea.on_enter()
+        except Exception as e:
+            print("Ankimon Paldea route:", e)
+    if name == "Galar":                        # Sword or Shield gyms, asked once
+        try:
+            from ..gym import galar
+            galar.on_enter()
+        except Exception as e:
+            print("Ankimon Galar version:", e)
 
 
 def _travel_label(r):
@@ -519,16 +625,34 @@ def _travel_label(r):
         total = 8
     if b is None:
         return r
-    return "%s   (%s)" % (r, "Champion" if b >= 9 else "%d/%d badges" % (b, total))
+    return "%s   (%s)" % (r, "Champion" if W.is_champion(b, r) else "%d/%d badges" % (b, total))
 
 
 def _refresh_travel_menu(sub):
+    # Area Zero isn't on the map at all until an Area Zero expedition is cleared
+    try:
+        from ..gym import expedition
+        if getattr(sub, "_ankimon_area_zero", None) is None and expedition.unlocked(W.AREA_ZERO):
+            act = QAction(W.AREA_ZERO_NAME, sub)
+            act.setData(W.AREA_ZERO_NAME)
+            act.setMenuRole(QAction.MenuRole.NoRole)
+            act.setCheckable(True)
+            act.triggered.connect(lambda _c=False: travel(W.AREA_ZERO_NAME))
+            sub._ankimon_region_group.addAction(act)
+            sub.addAction(act)
+            sub._ankimon_area_zero = act
+    except Exception as e:
+        print("Ankimon Area Zero menu:", e)
     cur = W.region()
+    az = W.in_area_zero()
     for act in sub.actions():
         r = act.data()
-        if r:
+        if r == W.AREA_ZERO_NAME:
+            act.setText("Area Zero   (inside Paldea)")
+            act.setChecked(az)
+        elif r:
             act.setText(_travel_label(r))
-            act.setChecked(r == cur)
+            act.setChecked(r == cur and not az)
 
 
 def install(game_menu):
@@ -548,6 +672,7 @@ def install(game_menu):
         group.addAction(act)
         sub.addAction(act)
     sub._ankimon_region_group = group          # keep a reference
+    sub._ankimon_area_zero = None
     # badge counts change as you play: relabel each time the menu opens
     sub.aboutToShow.connect(lambda m=sub: _refresh_travel_menu(m))
     _refresh_travel_menu(sub)

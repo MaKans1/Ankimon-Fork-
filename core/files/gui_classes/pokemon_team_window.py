@@ -60,6 +60,12 @@ class PokemonTeamDialog(QDialog):
             sprite_label = QLabel()
             pokemon_layout.addWidget(sprite_label)
 
+            # Right-click the sprite or name: that Pokémon's moves and held item
+            for _w in (sprite_label, pokemon_label):
+                _w.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                _w.customContextMenuRequested.connect(lambda _pos, i=i: self._open_pokemon(i))
+                _w.setToolTip("Right-click: moves and held item")
+
             # "Switch out Pokémon" button
             switch_button = QPushButton(f"Switch out Pokémon {i+1}")
             switch_button.clicked.connect(lambda _, i=i: self.switch_out_pokemon(i))
@@ -194,8 +200,10 @@ class PokemonTeamDialog(QDialog):
                 pokemon_level = pokemon['level']
                 sprite_path = os.path.join(frontdefault, f"{pokemon['id']}.png")
 
-                # Update label with name and level
-                frame_data['label'].setText(f"{pokemon_name} (Level {pokemon_level})")
+                # Update label with name and level (and what it's holding)
+                held = self._held_text(pokemon)
+                frame_data['label'].setText(f"{pokemon_name} (Level {pokemon_level})"
+                                            + (f"\nHolding: {held}" if held else ""))
 
                 # Display the sprite image
                 if os.path.exists(sprite_path):
@@ -207,6 +215,40 @@ class PokemonTeamDialog(QDialog):
             else:
                 frame_data['label'].setText("Pokémon Not Selected")
                 frame_data['sprite'].clear()  # Clear the sprite if not selected
+
+    @staticmethod
+    def _held_text(pokemon):
+        """'Normalium Z ✦' (✦ = a Z-Crystal it can use right now), or ''."""
+        item = (pokemon or {}).get("held_item")
+        if not item:
+            return ""
+        try:
+            from ..utils import item_display_name
+            label = item_display_name(item)
+        except Exception:
+            label = str(item).replace("-", " ").title()
+        try:
+            from ..gym import zmoves
+            if zmoves.crystal_type(item) and zmoves.can_use_crystal(pokemon, item):
+                label += " ✦"
+        except Exception:
+            pass
+        return label
+
+    def _open_pokemon(self, slot):
+        """Right-click a team slot: 'Your Pokémon' for it (moves, held item)."""
+        pokemon = self.team_pokemon[slot] if slot < len(self.team_pokemon) else None
+        if not pokemon:
+            return
+        try:
+            from ..wild import wild_menus
+            wild_menus.open_pokemon(pokemon.get("individual_id"), parent=self)
+            fresh = mw.ankimon_db.get_pokemon(pokemon.get("individual_id"))
+            if fresh:
+                self.team_pokemon[slot] = fresh
+        except Exception as e:
+            self.logger.log("error", f"Your Pokémon window failed: {e}")
+        self.update_team_display()
 
     # ANKIMON_TYPE_FILTER
     POKEMON_TYPES = [

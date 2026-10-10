@@ -61,8 +61,21 @@ def _set_from(c):
         "ivs": {k: int(iv.get(k, 15)) for k in ("hp", "atk", "def", "spa", "spd", "spe")},
         "evs": {k: int(ev.get(k, 0)) for k in ("hp", "atk", "def", "spa", "spd", "spe")},
         "moves": [to_id(m) for m in (c.attacks or [])],
+        "gigantamax": bool(getattr(c, "gigantamax", False)),
+        **_tera_fields(c),
         **_carry(c),
     }
+
+
+def _tera_fields(c):
+    """Who may Terastallize, and into what: a leader's ace (tera_type, rolled per
+    fight) or a Pokemon holding a Tera Shard ("water-tera-shard" -> Water)."""
+    t = getattr(c, "tera_type", None)
+    if not t:
+        held = str(getattr(c.source, "held_item", "") or "").lower()
+        if held.endswith("-tera-shard"):
+            t = held[:-len("-tera-shard")].capitalize()
+    return {"teraType": t or None, "canTera": bool(t)}
 
 
 def _carry(c):
@@ -116,6 +129,8 @@ class ShowdownBattle:
         self.timeout = timeout
         self.p_team, self.l_team = [], []
         self.moves, self.locked, self.ended, self.winner = [], False, False, None
+        self.zmoves, self.zused, self.zinfo, self.dmax, self.tera = {}, False, {}, {}, {}
+        self.fled = []
         self._q = queue.Queue()
         self.proc = subprocess.Popen(
             [str(NODE), str(BRIDGE)], cwd=str(RUNTIME), stdin=subprocess.PIPE,
@@ -168,19 +183,29 @@ class ShowdownBattle:
             pass
 
     # --- battle ------------------------------------------------------------
-    def start(self, player_team, leader_team, leader_label="The leader", wild=False):
+    def start(self, player_team, leader_team, leader_label="The leader", wild=False, totem=None, dynamax=None,
+              tera=None, titan=None):
+        """totem: {"aura": {...}} for an Alola totem trial (gymsim.js totem rules).
+        dynamax: {"p1": bool, "p2": bool} - who may Dynamax (Galar; dmax.config_for).
+        tera: {"p1": bool, "p2": bool} - who may Terastallize (Paldea; tera.config_for)."""
         self.p_team, self.l_team = list(player_team), list(leader_team)
         r = self._ask({"cmd": "start", "p1": [_set_from(c) for c in self.p_team],
                        "p2": [_set_from(c) for c in self.l_team], "leader": leader_label,
-                       "wild": bool(wild)})
+                       "wild": bool(wild), "totem": totem or None, "dynamax": dynamax or None,
+                       "tera": tera or None, "titan": titan or None})
         self._apply(r)
         return r.get("log") or []
 
-    def play_turn(self, move=None, smart=True):
-        """move: the display name the player clicked, or None for auto."""
-        r = self._ask({"cmd": "turn", "move": to_id(move) if move else None, "smart": bool(smart)})
+    def play_turn(self, move=None, smart=True, z=None, dmax=None, tera=None):
+        """move: the display name the player clicked, or None for auto.
+        z: True = that move as its Z-Move; "auto" = auto-battle may spend it."""
+        r = self._ask({"cmd": "turn", "move": to_id(move) if move else None, "smart": bool(smart),
+                       "z": z, "dmax": dmax, "tera": tera})
         self._apply(r)
-        return r.get("log") or []
+        lines = list(r.get("log") or [])
+        if self.fled:
+            lines.append("%s fainted - its allies fled!" % self.l_team[0].name)
+        return lines
 
     def _apply(self, r):
         for team, key in ((self.p_team, "p1"), (self.l_team, "p2")):
@@ -202,7 +227,19 @@ class ShowdownBattle:
                     pass
         # PP for the player's active Pokemon, keyed back to its display names
         self.moves, self.locked = r.get("moves") or [], bool(r.get("locked"))
+        # Z-Moves your active Pokemon could use now: {move id: Z-Move name}
+        self.zmoves = {z["id"]: z["name"] for z in (r.get("z") or [])}
+        # what each Z-Move really is (type, category, power or status bonus)
+        self.zinfo = {z["id"]: z for z in (r.get("z") or [])}
+        # Dynamax: {allowed, can, active, turns, gmax, used, foe, moves: [Max Move info]}
+        self.dmax = r.get("dmax") or {}
+        # Tera: {allowed, can (your Tera type), active (type), used, foe (type)}
+        self.tera = r.get("tera") or {}
+        self.zused = bool(r.get("zused"))
         a = self.active("user")
+        if a is not None and self.moves and [to_id(n) for n in a.attacks] != [m["id"] for m in self.moves]:
+            # a move slot changed mid-battle (Tera Blast): follow it, keep the PP
+            a.attacks = [m.get("name") or m["id"] for m in self.moves]
         if a is not None and self.moves:
             by_id = {m["id"]: m for m in self.moves}
             for name in a.attacks:
@@ -211,6 +248,21 @@ class ShowdownBattle:
                     a.pp[name] = int(m["pp"])
                     a.max_pp[name] = int(m["maxpp"])
         self.ended, self.winner = bool(r.get("ended")), r.get("winner")
+        # A totem trial ends when the totem faints (gymsim.js totemCheck), even
+        # if it never got to call for help: its reinforcements leave, so the
+        # session sees the leader out of Pokemon and counts the win - the
+        # classic engine does the same (gym_engine._totem_down).
+        self.fled = []
+        if self.ended and self.winner == "p1":
+            for c in self.l_team:
+                if c.hp > 0:
+                    c.hp = 0
+                    self.fled.append(c)
+                    try:
+                        c.source.hp = c.source.current_hp = 0
+                        c.source.battle_status = "fainted"
+                    except Exception:
+                        pass
 
     def active(self, side):
         team = self.p_team if side == "user" else self.l_team

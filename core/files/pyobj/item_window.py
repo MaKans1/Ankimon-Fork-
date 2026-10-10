@@ -463,6 +463,16 @@ class ItemWindow(QWidget):
             return [self._action_button("Feed (−10 %s EVs)" % stat.upper(), True,
                                         "Lowers its %s EVs by 10 and raises friendship." % stat.upper(),
                                         lambda: self._feed_berry(item, stat))]
+        if item in ("dynamax-band", "tera-orb") or item.endswith("-stake"):
+            return [self._action_button("Key item", False,
+                                        "Nothing to use or hold - owning it is all it takes.")]
+        if item == "herba-mystica":
+            return [self._action_button("Eat", True, "Shiny Pokémon become more likely to appear for a while.",
+                                        lambda: self._eat_herba(item))]
+        if item == "z-ring":
+            return [self._action_button("Key item", False,
+                                        "Lets a Pokémon holding a Z-Crystal use its Z-Move once "
+                                        "per gym battle. Nothing to equip.")]
         if item.endswith("-berry") and item[:-6] not in self.BATTLE_BERRIES:
             return [self._action_button("Feed (+friendship)", fn=lambda: self._feed_berry(item, None))]
         return [self._action_button("Give to hold", fn=lambda: self._prompt_and_give_held_item(item))]
@@ -568,6 +578,19 @@ class ItemWindow(QWidget):
             msg = "Your team became shrouded in mist!"
         mw.ankimon_db.update_item_quantity(item, -1)
         self.logger.log_and_showinfo("info", msg)
+        self.renewWidgets()
+
+    def _eat_herba(self, item):
+        """Herba Mystica: shiny wild Pokémon more likely for a while."""
+        try:
+            from ..wild import wild_rules as _wr
+            _wr.eat_herba()
+        except Exception as e:
+            self.logger.log_and_showinfo("error", "Couldn't eat it: %s" % e)
+            return
+        mw.ankimon_db.update_item_quantity(item, -1)
+        self.logger.log_and_showinfo("info", "You ate the Herba Mystica. You feel lucky - shiny "
+                                             "Pokémon are more likely for a while!")
         self.renewWidgets()
 
     def _feed_berry(self, item, ev_stat):
@@ -777,21 +800,29 @@ class ItemWindow(QWidget):
         self._pokemon_choices_cache = choices
         return choices
 
-    def _select_pokemon(self, title: str):
+    def _select_pokemon(self, title: str, keep=None, empty=None):
         """Searchable picker: name, nickname or type ("fire"). Returns
         (individual_id, pokedex_id) or None."""
         from ..functions import poke_search as PS
         try:
             rows = mw.ankimon_db.execute(
                 "SELECT name, individual_id, pokedex_id, level, json_extract(data, '$.type'), "
-                "json_extract(data, '$.nickname') FROM captured_pokemon").fetchall()
+                "json_extract(data, '$.nickname'), json_extract(data, '$.attacks') "
+                "FROM captured_pokemon").fetchall()
         except Exception as e:
             self.logger.log("error", f"Error loading Pokémon list: {e}")
             rows = []
         entries, by_key = [], {}
-        for name, iid, pid, level, types, nick in rows:
+        for name, iid, pid, level, types, nick, attacks in rows:
             if not (name and iid and pid):
                 continue
+            if keep is not None:            # e.g. a Z-Crystal: only Pokémon that can use it
+                try:
+                    atk = json.loads(attacks) if isinstance(attacks, str) else (attacks or [])
+                except Exception:
+                    atk = []
+                if not keep({"attacks": atk}):
+                    continue
             tl = PS.type_label(types)
             label = f"{name} (Lv {level})"
             if nick and str(nick).lower() != str(name).lower():
@@ -802,13 +833,24 @@ class ItemWindow(QWidget):
                             "types": PS.parse_types(types), "level": level})
             by_key[iid] = (iid, pid)
         if not entries:
-            self.logger.log_and_showinfo("error", "No Pokémon available.")
+            self.logger.log_and_showinfo("info" if empty else "error", empty or "No Pokémon available.")
             return None
         key = PS.choose_pokemon(self, title, entries)
         return by_key.get(key) if key else None
 
     def _prompt_and_give_held_item(self, item_name: str):
-        selected = self._select_pokemon("Give Item")
+        # Z-Crystals: only Pokémon that know a move of that type right now
+        keep = empty = None
+        try:
+            from ..gym import zmoves as _zm
+            z_type = _zm.crystal_type(item_name)
+            if z_type:
+                keep = lambda rec: _zm.can_use_crystal(rec, item_name)
+                empty = ("None of your Pokémon knows a %s-type move right now, so none "
+                         "could use its Z-Move." % z_type)
+        except Exception:
+            pass
+        selected = self._select_pokemon("Give Item", keep=keep, empty=empty)
         if not selected:
             return
         individual_id, _ = selected

@@ -52,6 +52,34 @@ Bug fixes and quality-of-life changes on top of Ankimon 2.03. The core is always
   - You start in the region you picked, and the game begins right away, with no Anki restart after choosing.
 - **What's new:** notes now come from this project, so the confusing "Ankimon Experimental - Version UNKNOWN" popup is gone. Nothing is shown when you're offline.
 
+## Partner-only moves removed
+These moves do nothing in Ankimon's one-on-one battles, or only help the opponent, so no Pokémon learns them any more:
+- by level-up, in the wild, or by TM;
+- **Removed:** Helping Hand, Ally Switch, Aromatic Mist, Coaching, Dragon Cheer, Hold Hands, Follow Me, Rage Powder, Spotlight, After You, Heal Pulse, Floral Healing, Decorate and Instruct.
+- **Your Pokémon that knew one** get the strongest move they could have learned by their level, or keep 3 moves until they learn more.
+- **Kept:** moves that also help the user (Howl, Gear Up, Magnetic Flux, Life Dew, screens, guards).
+
+## Catching and the Pokédex
+- **Upgrade Behavior** (Settings > Battle, under Replace Duplicate Catches):
+  - *Prioritize Level*: the higher level always wins.
+  - *Prioritize Average IV*: better IVs win within the Duplicate Level Window, and the higher level wins beyond it.
+- **Favorited Pokémon are never replaced** by a catch.
+- **Pokémon that evolve in different ways keep one copy per evolution:** Eevee keeps your 8 best, Ralts and Kirlia 2 (Gardevoir and Gallade), Tyrogue 3, Oddish and Gloom 2, and so on (23 species). Until they're full, a new catch is simply kept; after that it replaces your weakest copy if it's better.
+- **Evolving registers the new species in the Pokédex straight away** and checks region Pokédex badges.
+- **The Pokédex shows what you caught today.** It used to keep showing your collection as it was when Anki started, so new catches and evolutions looked uncaught until a restart.
+- **Region buttons filter the Pokédex grid** (All, Caught and Not Caught within that region). Before, they only changed the page count and progress line.
+- **Automatic Battle defaults to 3** (catch new species and better copies, otherwise defeat for EXP) for new players.
+
+- **Choose Pokémon Team:** each slot shows its held item; right-click a sprite or name for that Pokémon's moves and held item (forget, remember, TMs).
+
+## Readability
+- **Text colour follows the background:** every window that paints its own background (starter screen, evolution, battle popups) now sets a matching text colour, so text is readable in light and dark mode on every system. It was black on black in macOS light mode.
+- **First-start popups** (daily goal, "ready!") use Anki's own theme.
+- **Item names:** item drops and gym loot use the official names ("Super Potion", "PP Up"), and TM drops name their move ("TM Aerial Ace") instead of a sprite file name.
+
+## Popups
+- **Show Item Pickup Popups** (Settings > Battle > Wild Battle Popups, on by default). Off: items you find while reviewing still go into your bag, without the "You received an item" window.
+
 ## Fixes
 - **Monthly gift Pokémon** now arrives even if you don't own last month's. Before, the check for last month's Pokémon crashed and nothing was awarded, every time Anki started.
 
@@ -71,6 +99,11 @@ Bug fixes and quality-of-life changes on top of Ankimon 2.03. The core is always
 - "Fight Hotkeys" is now "Hotkeys". The catch/defeat keys apply when Automatic Battle is 0.
 
 ## Packages
+- **Ankimon > Other > Packages…** switches gyms, wild and showdown on or off (restart to apply). Your Pokémon and progress are kept either way.
+- **One update file for everyone:** updating with the full file keeps the packages you had, including for players who installed only some of them.
+- **Help > Update** downloads the newest Ankimon 2.x (Ankimon.ankiaddon) and shows the steps. It used to download the original Ankimon, which would have replaced 2.x. In 2.0 the same button gets 2.5.
+- **New items:** Z-Ring and Z-Crystals (Alola), Dynamax Band (Galar), Tera Orb and Tera Shards (Paldea), Herba Mystica (eat it from the bag) and the four ruinous stakes. Key items have no Use button, and none of these are random drops.
+- Package files that live in user_files (badge art, the Showdown helper) now update with the add-on. Before, Anki kept the old copies.
 - The core runs with any combination of packages:
   - without **gyms**, no gyms are offered;
   - without **wild**, wild battles are the classic random-move ones (`functions/wild_fallback.py`).

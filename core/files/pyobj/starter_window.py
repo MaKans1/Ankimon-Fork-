@@ -203,7 +203,7 @@ class StarterWindow(QWidget):
         from aqt.utils import showInfo
         showInfo("%s is ready! Your journey starts in %s.\n\nReview cards to battle wild Pokémon. "
                  "You can travel to other regions any time from Ankimon > Game > Travel."
-                 % (_pname(getattr(S.main_pokemon, "name", "Your Pokémon")), region), parent=self)
+                 % (_pname(getattr(S.main_pokemon, "name", "Your Pokémon")), region), parent=mw)
 
     def _ask_daily_goal(self):
         """Gym intervals and EXP are paced to this (functions/pacing.py)."""
@@ -213,7 +213,7 @@ class StarterWindow(QWidget):
         except (TypeError, ValueError):
             cur = 100
         goal, ok = QInputDialog.getInt(
-            self, "Your daily card goal",
+            mw, "Your daily card goal",
             "About how many cards do you review on a typical day?\n\n"
             "Gyms and EXP are paced to it, so the adventure lasts a few months at your pace.\n"
             "You can change it any time in Ankimon's Settings.",
@@ -276,7 +276,7 @@ class StarterWindow(QWidget):
         layout_buttons.addWidget(self.grass_start_button)
         button_widget.setLayout(layout_buttons)
         layout.addWidget(button_widget)
-        self.setStyleSheet("background-color: rgb(14,14,14);")
+        self.setStyleSheet("background-color: rgb(14,14,14); color: rgb(240,240,240);")
         self.setLayout(layout)
         self.show()
 
@@ -285,7 +285,7 @@ class StarterWindow(QWidget):
         layout = self.layout()
         starter_label = self.pokemon_display_chosen_starter(starter_name)
         layout.addWidget(starter_label)
-        self.setStyleSheet("background-color: rgb(14,14,14);")
+        self.setStyleSheet("background-color: rgb(14,14,14); color: rgb(240,240,240);")
         self.setLayout(layout)
         self.setMaximumWidth(512)
         self.setMaximumHeight(340)
@@ -302,7 +302,7 @@ class StarterWindow(QWidget):
         layout = self.layout()
         fossil_label = self.pokemon_display_fossil_pokemon(fossil_id, fossil_name)
         layout.addWidget(fossil_label)
-        self.setStyleSheet("background-color: rgb(14,14,14);")
+        self.setStyleSheet("background-color: rgb(14,14,14); color: rgb(240,240,240);")
         self.setLayout(layout)
         self.setMaximumWidth(512)
         self.setMaximumHeight(340)
@@ -318,20 +318,20 @@ class StarterWindow(QWidget):
         # Create buttons for catching and killing the Pokémon
         water_starter_button = QPushButton(f"{(water_start).capitalize()}")
         water_starter_button.setFont(QFont("Arial",12))  # Adjust the font size and style as needed
-        water_starter_button.setStyleSheet("background-color: rgb(44,44,44);")
+        water_starter_button.setStyleSheet("background-color: rgb(44,44,44); color: rgb(240,240,240);")
         #qconnect(water_starter_button.clicked, choose_pokemon)
         qconnect(water_starter_button.clicked, lambda: self.choose_pokemon(water_start))
 
         fire_starter_button = QPushButton(f"{(fire_start).capitalize()}")
         fire_starter_button.setFont(QFont("Arial", 12))  # Adjust the font size and style as needed
-        fire_starter_button.setStyleSheet("background-color: rgb(44,44,44);")
+        fire_starter_button.setStyleSheet("background-color: rgb(44,44,44); color: rgb(240,240,240);")
         #qconnect(fire_starter_button.clicked, choose_pokemon)
         qconnect(fire_starter_button.clicked, lambda: self.choose_pokemon(fire_start))
         # Set the merged image as the pixmap for the QLabel
 
         grass_start_button = QPushButton(f"{(grass_start).capitalize()}")
         grass_start_button.setFont(QFont("Arial", 12))  # Adjust the font size and style as needed
-        grass_start_button.setStyleSheet("background-color: rgb(44,44,44);")
+        grass_start_button.setStyleSheet("background-color: rgb(44,44,44); color: rgb(240,240,240);")
         #qconnect(grass_start_button.clicked, choose_pokemon)
         qconnect(grass_start_button.clicked, lambda: self.choose_pokemon(grass_start))
         # Set the merged image as the pixmap for the QLabel

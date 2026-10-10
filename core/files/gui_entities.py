@@ -281,7 +281,7 @@ class IDTableWidget(QWidget):
         html_content = read_html_file(f"{table_gen_id_html_path}")  # Replace with the path to your HTML file
         label.setText(html_content)  # 'html_table' contains the HTML table string
         label.setWordWrap(True)
-        label.setStyleSheet("background-color: rgb(44,44,44);")
+        label.setStyleSheet("background-color: rgb(44,44,44); color: rgb(240,240,240);")
         # Layout
         layout = QVBoxLayout()
         layout.addWidget(label)

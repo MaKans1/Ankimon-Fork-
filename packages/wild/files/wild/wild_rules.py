@@ -36,8 +36,6 @@ FLEEING
     Free, and brings a new wild Pokemon.
 
 HIDDEN RULES (deliberately not shown in the UI)
-    survive rule   your Pokemon at full HP survives any single hit with 1 HP
-                   (the Sturdy effect, wild battles only)
     heal budget    a wild Pokemon regains at most 50% of its max HP per
                    encounter, so drain / recovery can't stall forever
     repeat limit   a support move is used at most twice per life (wild_ai)
@@ -57,14 +55,27 @@ from . import wild_ai
 # Travel model: you are always in exactly one region (no "all regions" mode).
 REGIONS = ["Kanto", "Johto", "Hoenn", "Sinnoh", "Unova", "Kalos", "Alola", "Galar", "Paldea"]
 REGION_GEN = {name: i + 1 for i, name in enumerate(REGIONS)}
+# Area Zero: a place inside Paldea (gyms, levels and badges stay Paldea's), on
+# the Travel menu only once an Area Zero expedition is cleared. Its wild Pokemon
+# are the Paradox Pokemon - and they live nowhere else (NOT_WILD).
+AREA_ZERO = "area_zero"
+AREA_ZERO_NAME = "Area Zero"
+PARADOX = (984, 985, 986, 987, 988, 989, 990, 991, 992, 993, 994, 995, 1005, 1006)
+PARADOX_DLC = (1009, 1010, 1020, 1021, 1022, 1023)       # rarer: 1 find in PARADOX_DLC_SHARE
+PARADOX_DLC_SHARE = 0.1
+# Never in the normal wild pool: Paradox Pokemon (Area Zero only), Kubfu and
+# Urshifu (Kubfu has its own spawn once one joins you: gym/galar.py)
+NOT_WILD = set(PARADOX) | set(PARADOX_DLC) | {891, 892}
 HOME_REGION = "Kanto"
 GEN_MAX = {1: 151, 2: 251, 3: 386, 4: 493, 5: 649, 6: 721, 7: 809, 8: 905, 9: 1025}
 
 # Red/Blue-style route levels by badges earned (9 = champion beaten)
 RB_BANDS = {0: (2, 7), 1: (5, 14), 2: (8, 18), 3: (13, 26), 4: (20, 30), 5: (22, 35),
             6: (25, 38), 7: (30, 42), 8: (40, 55), 9: (46, 67)}
-STRONG_PCT = 0.10          # share of strong spawns
-STRONG_MAX = 10            # up to this many levels above the band
+STRONG_PCT = 0.10          # share of strong ("Alpha") spawns
+STRONG_MAX = 12            # Alphas: up to this many levels above the band
+ALPHA_IV_FLOOR = 16        # Alphas: every IV rolled from 16 (~50%) to 31 - never forced to 31
+LEGEND_IV_FLOOR = 25       # legendaries: every IV from 25 (~80%) to 31 - never forced to 31
 HEAL_BUDGET = 0.5          # wild may regain at most this share of max HP per encounter
 BABY_PREVO_STRONG_BST = 450  # Snorlax, Chansey, Lucario...: wild from Lv 20, not Lv 1
 
@@ -84,6 +95,8 @@ class _WildState:
         self.fainted = set()     # team members that fainted this encounter
         self.participants = []   # everyone who fought this encounter, in order
         self.meta_loaded = False
+        self.alpha = False       # the spawn being generated is an Alpha
+        self.kubfu = False       # the spawn being generated is a Kubfu (shiny x2)
         self.rounds = 0          # rounds fought this encounter
         self.team_sig = None     # (buddy, team slots) as the fight stands
 
@@ -146,6 +159,25 @@ def set_region(name):
         _settings().set("misc.region", name)
 
 
+def area() -> str:
+    """A place inside the current region ("" = the region itself)."""
+    return str(_meta_get("area", "") or "") if region() == "Paldea" else ""
+
+
+def set_area(a) -> None:
+    _meta_set("area", a or "")
+
+
+def in_area_zero() -> bool:
+    if area() != AREA_ZERO:
+        return False
+    try:
+        from ..gym import expedition
+        return expedition.unlocked(AREA_ZERO)
+    except Exception:
+        return False
+
+
 def region_gen():
     return REGION_GEN.get(region())
 
@@ -167,7 +199,12 @@ def region_name(dex):
 
 
 def region_allows(dex):
-    """Only the current region's Pokémon appear in the wild."""
+    """Only the current region's Pokémon appear in the wild (never NOT_WILD)."""
+    try:
+        if int(dex) in NOT_WILD:
+            return False
+    except (TypeError, ValueError):
+        pass
     return gen_of(dex) == region_gen()
 
 
@@ -175,7 +212,12 @@ def filter_ids(ids):
     """A tier list -> this region's ids, so the spawn loop picks a valid
     species on the first try."""
     g = region_gen()
-    return [i for i in ids if isinstance(i, int) and gen_of(i) == g]
+    return [i for i in ids if isinstance(i, int) and gen_of(i) == g and i not in NOT_WILD]
+
+
+def _paradox(rng):
+    pool = PARADOX_DLC if rng.random() < PARADOX_DLC_SHARE else PARADOX
+    return {"id": rng.choice(pool), "tier": "Legendary" if pool is PARADOX_DLC else "Normal"}
 
 
 # -------------------------------------------------------------- levels ----
@@ -191,9 +233,24 @@ def _defeated():
     return {int(i) for i in gym_ui.progress().defeated_ids()}
 
 
+def badges_total(reg=None):
+    """How many badges the region's ladder has (Alola: 12 trials)."""
+    try:
+        from ..gym import gym_data
+        return int(gym_data.badge_count(reg or region()) or 8)
+    except Exception:
+        return 8
+
+
+def is_champion(b, reg=None):
+    """badges() says the region's Champion is beaten."""
+    return b is not None and int(b) > badges_total(reg)
+
+
 def badges(reg=None):
-    """Badges earned in a region (default: the one you're in); 9 = that
-    region's Champion beaten. None without the gym ladder."""
+    """Badges earned in a region (default: the one you're in); all of them + 1
+    = that region's Champion beaten (9 in Kanto; Alola has 12 trials, so 13).
+    None without the gym ladder."""
     try:
         from ..gym import gym_config
         if not gym_config.enabled():
@@ -201,9 +258,10 @@ def badges(reg=None):
         from ..gym import gym_data
         ids = _defeated()
         reg = reg or region()
+        total = gym_data.badge_count(reg) or 8
         if gym_data.champion_beaten(ids, reg):
-            return 9
-        return min(8, gym_data.badges_earned(ids, reg))
+            return total + 1
+        return min(total, gym_data.badges_earned(ids, reg))
     except Exception:
         return None
 
@@ -317,9 +375,26 @@ def pick_level(buddy_level, rng=random):
     if bd is None:
         return None
     _b, lo, hi = bd
-    if rng.random() < STRONG_PCT:
+    STATE.alpha = rng.random() < STRONG_PCT
+    if STATE.alpha:
         return min(100, hi + rng.randint(1, STRONG_MAX))
     return rng.randint(lo, hi)
+
+
+def floor_ivs(floor, rng=random):
+    """Every IV rolled evenly from `floor` to 31: strong, but no forced 31s."""
+    return {k: rng.randint(int(floor), 31) for k in ("hp", "atk", "def", "spa", "spd", "spe")}
+
+
+def alpha_ivs(_rolled=None, rng=random):
+    return floor_ivs(ALPHA_IV_FLOOR, rng)
+
+
+def consume_alpha():
+    """Was the spawn just generated an Alpha? (asked once, for its IVs)"""
+    a = STATE.alpha
+    STATE.alpha = False
+    return a
 
 
 # ----------------------------------------------------- species fix-ups ----
@@ -456,19 +531,46 @@ def move_enabled(individual_id, move):
     return move_id(move) not in disabled_moves(individual_id)
 
 
+# Moves the wild engine (one round per card) can't play correctly:
+# charge-up and recharge moves, lock-in moves, and status moves that have no
+# effect there. Wild battles never use them; gyms (Showdown) use them normally.
+WILD_UNSUPPORTED_STATUS = {"disable", "encore", "yawn", "perishsong", "attract", "torment",
+                           "imprison", "embargo", "confuseray", "supersonic", "sweetkiss",
+                           "teeterdance", "flatter", "swagger"}
+_UNSUPPORTED = []
+
+
+def wild_unsupported(move):
+    if not _UNSUPPORTED:
+        ids = set(WILD_UNSUPPORTED_STATUS)
+        for k, v in all_move_json.items():
+            flags = v.get("flags") or {}
+            if flags.get("charge") or flags.get("recharge") or                     (v.get("self") or {}).get("volatileStatus") == "lockedmove":
+                ids.add(k)
+        _UNSUPPORTED.append(ids)
+    return move_id(move) in _UNSUPPORTED[0]
+
+
+def _usable(moves):
+    """Moves the wild engine plays correctly (all of them if none are)."""
+    ok = [m for m in moves if not wild_unsupported(m)]
+    return ok or moves
+
+
 def wild_moves(main_pokemon):
-    """The buddy's ticked moves (all of them if somehow none are ticked)."""
+    """The buddy's ticked moves (all of them if somehow none are ticked),
+    minus the ones wild battles can't use."""
     attacks = [a for a in (main_pokemon.attacks or []) if a]
     off = disabled_moves(getattr(main_pokemon, "individual_id", None))
     use = [a for a in attacks if move_id(a) not in off]
-    return use or attacks
+    return _usable(use or attacks)
 
 
 def choose_moves(main_pokemon, enemy_pokemon, s, rng=random):
     """(user_attack, enemy_attack) for this round. Falls back to the old
     random pick if anything goes wrong, so a review is never blocked."""
-    ua = [a for a in (main_pokemon.attacks or []) if a]
-    ea = [a for a in (enemy_pokemon.attacks or []) if a]
+    ua = _usable([a for a in (main_pokemon.attacks or []) if a])
+    ea = _usable([a for a in (enemy_pokemon.attacks or []) if a])
     user_attack = rng.choice(ua) if ua else "splash"
     enemy_attack = rng.choice(ea) if ea else "splash"
     try:
@@ -508,13 +610,6 @@ def after_turn(s, user_attack, enemy_attack, heals_to_opponent, main_pokemon=Non
         return heal
     except Exception:
         return heals_to_opponent
-
-
-def survive_rule_applies(user_active):
-    try:
-        return 0 < user_active.hp and user_active.hp >= user_active.maxhp
-    except Exception:
-        return False
 
 
 def _battle_loop_state():
@@ -576,6 +671,63 @@ def _save_meta():
         _commit(db)
     except Exception:
         pass
+
+
+# ------------------------------------------------- Herba Mystica (Paldea) --
+# A Titan's Herba Mystica (Sc/Vi: the sandwich that gives Sparkling Power):
+# eating one makes shiny wild Pokemon more likely for a while. How much and
+# how long stay internal - the player only reads "more likely, for a while".
+SPARKLE_ENCOUNTERS = 100        # wild Pokemon that get the boost per Herba
+SPARKLE_BOOST = 3               # shiny odds x this while it lasts
+
+
+def _meta_get(key, default=None):
+    try:
+        r = _meta_db().execute("SELECT value FROM wild_meta WHERE key=?", (key,)).fetchone()
+        return r[0] if r else default
+    except Exception:
+        return default
+
+
+def _meta_set(key, value):
+    try:
+        db = _meta_db()
+        db.execute("INSERT INTO wild_meta (key, value) VALUES (?, ?) "
+                   "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
+        _commit(db)
+    except Exception:
+        pass
+
+
+def sparkle_left() -> int:
+    try:
+        return max(0, int(_meta_get("sparkle_left", 0) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def eat_herba() -> int:
+    """Use a Herba Mystica: the boost lasts SPARKLE_ENCOUNTERS more wild Pokemon."""
+    left = sparkle_left() + SPARKLE_ENCOUNTERS
+    _meta_set("sparkle_left", left)
+    return left
+
+
+def shiny_boost() -> int:
+    """Shiny multiplier for the wild Pokemon being made now (counts it down)."""
+    mult = 1
+    if STATE.kubfu:                              # a Kubfu: twice as likely
+        STATE.kubfu = False
+        try:
+            from ..gym import galar
+            mult = int(galar.KUBFU_SHINY)
+        except Exception:
+            mult = 2
+    left = sparkle_left()
+    if left <= 0:
+        return mult
+    _meta_set("sparkle_left", left - 1)
+    return SPARKLE_BOOST * mult
 
 
 def _main():
@@ -862,11 +1014,31 @@ def legendary_moves(name, level):
 
 
 def special_spawn(rng=random):
-    """A rare spawn for this encounter, or None. Never right after a flee."""
+    """A rare spawn for this encounter, or None. Never right after a flee.
+    In Area Zero every encounter is a Paradox Pokemon."""
+    az = in_area_zero()
     if STATE.block_shiny:
-        return None
+        return _paradox(rng) if az else None
+    # Roaming legendaries, mythicals and Mewtwo (gym package, legends.py): an
+    # offer to battle them comes on the next card; this encounter stays normal.
+    legends = None
     try:
-        if rng.random() < MEWTWO_RATE and mewtwo_status()[0]:
+        from ..gym import legends
+        if legends.roll(rng):
+            return _paradox(rng) if az else None
+    except Exception:
+        legends = None
+    if az:
+        return _paradox(rng)
+    try:                                         # Kubfu: Galar, once one has joined you
+        from ..gym import galar
+        if region() == "Galar" and galar.kubfu_joined() and rng.random() < galar.KUBFU_RATE:
+            STATE.kubfu = True
+            return {"id": galar.KUBFU, "tier": "Legendary"}
+    except Exception:
+        pass
+    try:
+        if legends is None and rng.random() < MEWTWO_RATE and mewtwo_status()[0]:
             return {"id": MEWTWO_ID, "tier": "Legendary", "level": MEWTWO_LEVEL,
                     "moves": LEGEND_SETS.get(MEWTWO_ID) or legendary_moves("mewtwo", MEWTWO_LEVEL)}
         if rng.random() < STARTER_RATE:

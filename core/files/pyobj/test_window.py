@@ -615,7 +615,8 @@ class TestWindow(QWidget):
         # custom font
         custom_font = load_custom_font(26, int(self.settings_obj.get("misc.language")))
 
-        message_box_text = f"{self.translator.translate('received_an_item', item_name=item.capitalize())} !"
+        from ..utils import item_display_name
+        message_box_text = f"{self.translator.translate('received_an_item', item_name=item_display_name(item))} !"
 
         # Draw the text on top of the image
         # Adjust the font size as needed
@@ -787,21 +788,21 @@ class TestWindow(QWidget):
 
         nickname_input = QLineEdit()
         nickname_input.setPlaceholderText(self.translator.translate("choose_nickname"))
-        nickname_input.setStyleSheet("background-color: rgb(44,44,44);")
+        nickname_input.setStyleSheet("background-color: rgb(44,44,44); color: rgb(240,240,240);")
         nickname_input.setFixedSize(120, 30)  # Adjust the size as needed
 
         # Create buttons for catching and killing the Pokémon
         catch_button = QPushButton(self.translator.translate("catch_button"))
         catch_button.setFixedSize(175, 30)  # Adjust the size as needed
         catch_button.setFont(QFont("Arial", 12))  # Adjust the font size and style as needed
-        catch_button.setStyleSheet("background-color: rgb(44,44,44);")
+        catch_button.setStyleSheet("background-color: rgb(44,44,44); color: rgb(240,240,240);")
         #catch_button.setFixedWidth(150)
         qconnect(catch_button.clicked, lambda: self._reset_window_title(mw.catchpokemon))
 
         kill_button = QPushButton(self.translator.translate("defeat_button"))
         kill_button.setFixedSize(175, 30)  # Adjust the size as needed
         kill_button.setFont(QFont("Arial", 12))  # Adjust the font size and style as needed
-        kill_button.setStyleSheet("background-color: rgb(44,44,44);")
+        kill_button.setStyleSheet("background-color: rgb(44,44,44); color: rgb(240,240,240);")
         #kill_button.setFixedWidth(150)
         qconnect(kill_button.clicked, lambda: self._reset_window_title(mw.defeatpokemon))
 
@@ -826,7 +827,7 @@ class TestWindow(QWidget):
 
         layout.addWidget(battle_widget)
 
-        self.setStyleSheet("background-color: rgb(44,44,44);")
+        self.setStyleSheet("background-color: rgb(44,44,44); color: rgb(240,240,240);")
         self.setLayout(layout)
 
         self.setMaximumWidth(556)
@@ -845,7 +846,7 @@ class TestWindow(QWidget):
 
         layout.addWidget(battle_widget)
 
-        self.setStyleSheet("background-color: rgb(44,44,44);")
+        self.setStyleSheet("background-color: rgb(44,44,44); color: rgb(240,240,240);")
         self.setLayout(layout)
 
         self.setMaximumWidth(556)
@@ -859,7 +860,7 @@ class TestWindow(QWidget):
 
         layout.addWidget(item_widget)
 
-        Receive_Window.setStyleSheet("background-color: rgb(44,44,44);")
+        Receive_Window.setStyleSheet("background-color: rgb(44,44,44); color: rgb(240,240,240);")
         Receive_Window.setMaximumWidth(512)
         Receive_Window.setMaximumHeight(320)
 
@@ -874,7 +875,7 @@ class TestWindow(QWidget):
 
         layout.addWidget(item_widget)
 
-        Receive_Window.setStyleSheet("background-color: rgb(44,44,44);")
+        Receive_Window.setStyleSheet("background-color: rgb(44,44,44); color: rgb(240,240,240);")
         Receive_Window.setMaximumWidth(512)
         Receive_Window.setMaximumHeight(320)
 
@@ -902,7 +903,7 @@ class TestWindow(QWidget):
 
         layout.addWidget(button_widget)
 
-        self.setStyleSheet("background-color: rgb(177,147,209);")
+        self.setStyleSheet("background-color: rgb(177,147,209); color: rgb(20,20,20);")
         self.setLayout(layout)
 
         self.setMaximumWidth(500)

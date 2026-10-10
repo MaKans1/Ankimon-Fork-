@@ -50,6 +50,8 @@ def _log(lvl, m):
         print("[expedition] %s" % m)
 
 
+LEGEND_IV_FLOOR = 25        # same floor as wild_rules.LEGEND_IV_FLOOR
+
 # ------------------------------------------------------------ unlocks ----
 EXPEDITION_REGION = "Kanto"      # default region (the birds live in Kanto)
 
@@ -78,15 +80,117 @@ def caught(exp: Expedition) -> bool:
         return False
 
 
+def _progress():
+    from .gym_ui import progress
+    return progress()
+
+
+def done(exp: Expedition) -> bool:
+    """Finished for good: its legendary caught, or (a release expedition) cleared.
+    2.0 saves: Burned Tower used to catch Entei, so owning Entei counts."""
+    if getattr(exp, "repeatable", False):
+        return False
+    if getattr(exp, "releases", ()):
+        try:
+            if _progress().get_meta("exp_done_" + exp.key):
+                return True
+        except Exception:
+            pass
+        try:
+            from ..wild import dex
+            return any(i in dex.registered() for i in exp.releases)
+        except Exception:
+            return False
+    return caught(exp)
+
+
+def partner(exp: Expedition) -> Optional[Expedition]:
+    """The other half of a pair expedition (Zacian / Zamazenta), if any."""
+    k = getattr(exp, "excludes", "")
+    return next((e for e in EXPEDITIONS if e.key == k), None) if k else None
+
+
+def unlocked(place) -> bool:
+    """A place opened by finishing an expedition (Area Zero). Until then it
+    isn't offered anywhere at all."""
+    try:
+        if _progress().get_meta("unlock_" + place):
+            return True
+    except Exception:
+        pass
+    return any(done(e) for e in EXPEDITIONS if getattr(e, "unlocks", "") == place)
+
+
+def held(item) -> int:
+    """How many of an item are in your bag (key items too)."""
+    try:
+        for it in mw.ankimon_db.get_all_items() or []:
+            if str(it.get("item_name") or "").lower() == item:
+                return int(it.get("quantity") or 0)
+    except Exception as e:
+        _log("warning", "could not read the bag: %s" % e)
+    return 0
+
+
+def owned_ids() -> set:
+    """Dex numbers of the Pokemon you own right now (team + PC)."""
+    try:
+        return {int(i) for i in (mw.ankimon_db.get_all_pokemon_ids() or set())}
+    except Exception:
+        return set()
+
+
+def champion_beaten(region) -> bool:
+    try:
+        from .gym_data import champion_beaten as _cb
+        return bool(_cb(_progress().defeated_ids(), region))
+    except Exception:
+        return False
+
+
+def _names(ids, joiner=" and "):
+    out = []
+    for i in ids:
+        try:
+            from ..functions.pokedex_functions import search_pokedex_by_id
+            out.append(_dn(search_pokedex_by_id(int(i))))
+        except Exception:
+            out.append("#%d" % int(i))
+    return joiner.join(out)
+
+
 def status(exp: Expedition):
     """(can_start, label)"""
-    if caught(exp):
+    if done(exp):
+        if getattr(exp, "releases", ()):
+            return False, "Done - %s roam the wild" % _names(exp.releases)
         return False, "%s caught" % exp.legendary
     reg = getattr(exp, "region", EXPEDITION_REGION)
+    other = partner(exp)
+    if other is not None and done(other):
+        return False, "You chose %s - %s may be roaming %s's wild" % (other.legendary, exp.legendary, reg)
     b = badges(reg)
     if b < exp.badges_needed:
         return False, "Locked - needs %d %s badges (you have %d)" % (
             exp.badges_needed, reg, b)
+    first = getattr(exp, "needs_done", "")
+    if first:
+        other = next((e for e in EXPEDITIONS if e.key == first), None)
+        if other is not None and not done(other):
+            return False, "Locked - clear %s first" % other.name
+    if getattr(exp, "needs_champion", False) and not champion_beaten(reg):
+        return False, "Locked - beat %s's Champion first" % reg
+    short = [(n, q) for n, q in getattr(exp, "needs_items", ()) if held(n) < q]
+    if short:
+        return False, "Locked - needs %s" % ", ".join(
+            "%d %ss (you have %d)" % (q, _label(n), held(n)) for n, q in short)
+    own = owned_ids()
+    missing = [i for i in getattr(exp, "needs_owned", ()) if int(i) not in own]
+    if missing:
+        return False, "Locked - needs you to own %s" % _names(missing)
+    anyof = getattr(exp, "needs_any", ())
+    if anyof and not any(int(i) in own for i in anyof):
+        return False, "Locked - needs you to own %s" % _names(anyof, " or ")
     if here() != reg:
         return False, "Travel to %s to set out" % reg
     return True, "Ready"
@@ -220,11 +324,8 @@ def build_foes(floor) -> List[Combatant]:
         if p is None:
             continue
         if floor.boss:
-            # Legendaries: three perfect IVs, like the modern games
-            iv = {k: random.randint(0, 31) for k in ("hp", "atk", "def", "spa", "spd", "spe")}
-            for k in random.sample(list(iv), 3):
-                iv[k] = 31
-            p.iv = iv
+            # Legendaries: every IV from 25 (~80%) to 31 - strong, never a forced 31
+            p.iv = {k: random.randint(LEGEND_IV_FLOOR, 31) for k in ("hp", "atk", "def", "spa", "spd", "spe")}
             p.tier = "Legendary"
             mx = int(p.calculate_max_hp())
             p.max_hp = p.hp = p.current_hp = mx
@@ -275,11 +376,14 @@ class ExpeditionRun:
         leader = floor.foes[0].species if floor.boss else "Wild Pokémon"
         gym = SimpleNamespace(gym_id=None, name="%s: %s" % (self.exp.name, floor.name),
                               leader=leader, badge_name="", cash_reward=floor.cash,
-                              team=floor.foes, kind="expedition", is_elite=False)
+                              team=floor.foes, kind="expedition", is_elite=False,
+                              region=getattr(self.exp, "region", EXPEDITION_REGION))
         session = GymSession(gym, alive, foes)
         if self.sd is not None:
             try:
-                self.sd.start(alive, foes, leader, wild=True)
+                from . import dmax as _dm, tera as _tr
+                self.sd.start(alive, foes, leader, wild=True, dynamax=_dm.config_for(gym),
+                              tera=_tr.config_for(gym))
                 session.engine = self.sd
             except Exception as e:
                 _log("warning", "Showdown could not start this floor, using classic: %s" % e)
@@ -316,6 +420,14 @@ class ExpeditionRun:
             self._catch(session)
             self._end("won")
             return
+        if getattr(self.exp, "releases", ()) and self.floor_i >= len(self.exp.floors) - 1:
+            self._release()
+            self._end("released")
+            return
+        if getattr(self.exp, "evolves", ()) and self.floor_i >= len(self.exp.floors) - 1:
+            self._evolve()
+            self._end("evolved")
+            return
         self.floor_i += 1
         camp = CampDialog(self, parent=mw)
         if camp.exec() == QDialog.DialogCode.Accepted:
@@ -335,10 +447,43 @@ class ExpeditionRun:
             boss.battle_status = "fighting"
             save_caught_pokemon(boss, _dn(boss.name), achievements)
             self.caught_obj = boss
+            if getattr(self.exp, "unlocks", ""):
+                _progress().set_meta("unlock_" + self.exp.unlocks, "1")
         except Exception as e:
             _log("error", "saving the legendary failed: %s" % e)
             QMessageBox.warning(mw, "Expedition", "You won, but saving %s failed: %s"
                                 % (self.exp.legendary, e))
+
+    def _release(self):
+        """A release expedition is cleared: its legendaries start roaming."""
+        try:
+            _progress().set_meta("exp_done_" + self.exp.key, "1")
+            from . import legends
+            legends.release(self.exp.releases)
+        except Exception as e:
+            _log("error", "releasing %s failed: %s" % (self.exp.legendary, e))
+
+    def _evolve(self):
+        """The towers: evolve one of your Kubfu (you pick which)."""
+        frm, to, to_name = self.exp.evolves
+        self.evolved = None
+        mons = [r for r in _all_records() if int(r.get("id") or 0) == int(frm)]
+        if not mons:
+            return
+        pick = mons[0]
+        if len(mons) > 1:
+            from aqt.qt import QInputDialog
+            labels = ["%s  Lv %d%s" % (r.get("nickname") or r.get("name"), int(r.get("level") or 1),
+                                       "  (shiny)" if r.get("shiny") else "") for r in mons]
+            choice, ok = QInputDialog.getItem(mw, self.exp.name, "Which %s evolves into %s?"
+                                              % (_names((frm,)), to_name), labels, 0, False)
+            if ok and choice in labels:
+                pick = mons[labels.index(choice)]
+        try:
+            self.evolved = (pick.get("nickname") or pick.get("name"), evolve_record(pick, to, to_name))
+        except Exception as e:
+            _log("error", "evolving %s failed: %s" % (pick.get("name"), e))
+            QMessageBox.warning(mw, "Expedition", "You cleared it, but the evolution failed: %s" % e)
 
     # --- the end ------------------------------------------------------
     def _end(self, result):
@@ -356,6 +501,16 @@ class ExpeditionRun:
             title = "You caught %s!" % self.exp.legendary
             lines.insert(0, "%s is yours. It's in your collection now." % self.exp.legendary
                          + (" And it's SHINY!" if getattr(self.caught_obj, "shiny", False) else ""))
+        elif result == "released":
+            title = "%s awoke!" % self.exp.legendary
+            lines.insert(0, "%s burst out of %s and now roam %s's wild. Something powerful "
+                            "may cross your path while you review." % (
+                                _names(self.exp.releases), self.exp.name, self.exp.region))
+        elif result == "evolved":
+            ev = getattr(self, "evolved", None)
+            title = ("%s evolved!" % ev[0]) if ev else "You cleared %s" % self.exp.name
+            lines.insert(0, ("%s took in the tower's teachings and evolved into %s!" % ev) if ev else
+                         "You reached the top, but you have no %s to train here." % _names(self.exp.evolves[:1]))
         elif result == "lost":
             title = "Your team was overwhelmed"
             lines.insert(0, "Everyone fainted on %s. You made it back safely - "
@@ -535,9 +690,14 @@ class ExpeditionMenu(QDialog):
             box.setFrameShape(QFrame.Shape.StyledPanel)
             row = QHBoxLayout(box)
             ok, label = status(exp)
-            boss = exp.boss.foes[0]
-            text = QLabel("<b>%s</b> - %s Lv %d<br><span style='color:gray'>%s</span><br><i>%s</i>"
-                          % (exp.name, exp.legendary, boss.level, exp.blurb, label))
+            if exp.boss is not None:
+                head = "%s Lv %d" % (exp.legendary, exp.boss.foes[0].level)
+            elif getattr(exp, "evolves", ()):
+                head = "%s evolves into %s" % (_names(exp.evolves[:1]), exp.legendary)
+            else:
+                head = "%s (they flee when woken)" % exp.legendary
+            text = QLabel("<b>%s</b> - %s<br><span style='color:gray'>%s</span><br><i>%s</i>"
+                          % (exp.name, head, exp.blurb, label))
             text.setWordWrap(True)
             row.addWidget(text, 1)
             b = QPushButton("Set out")
@@ -545,19 +705,48 @@ class ExpeditionMenu(QDialog):
             b.clicked.connect(lambda _c=False, e=exp: self._go(e))
             row.addWidget(b)
             v.addWidget(box)
-        away = {}
-        for e in EXPEDITIONS:
-            r = getattr(e, "region", EXPEDITION_REGION)
-            if r != reg:
-                away.setdefault(r, []).append(e.name)
-        if away:
-            other = QLabel("<span style='color:gray'>Elsewhere: %s</span>" % "; ".join(
-                "%s (%s)" % (r, ", ".join(n)) for r, n in away.items()))
-            other.setWordWrap(True)
-            v.addWidget(other)
+        try:
+            from . import legends
+            note = legends.menu_note(reg)
+        except Exception:
+            note = ""
+        if note:
+            hint = QLabel(note)
+            hint.setWordWrap(True)
+            v.addWidget(hint)
+        from .gym_data import OPEN_WORLD
+        if reg in OPEN_WORLD:               # open world: change where you're heading
+            wb = QPushButton("Where to next...")
+            wb.clicked.connect(self._where_next)
+            v.addWidget(wb)
+        rb = QPushButton("Gym Rematches...")
+        try:
+            from . import rematch
+            have, need = rematch.counter()
+            rb.setText("Gym Rematches...  (%s)" % ("ready!" if have >= need else "%d / %d cards" % (have, need)))
+        except Exception:
+            pass
+        rb.clicked.connect(self._rematches)
+        v.addWidget(rb)
         close = QPushButton("Close")
         close.clicked.connect(self.reject)
         v.addWidget(close, alignment=Qt.AlignmentFlag.AlignRight)
+
+    def _where_next(self):
+        self.accept()
+        try:
+            from . import paldea
+            paldea.ask()
+        except Exception as e:
+            _log("error", "Where to next failed: %s" % e)
+
+    def _rematches(self):
+        self.accept()
+        try:
+            from . import rematch
+            rematch.open_menu()
+        except Exception as e:
+            QMessageBox.warning(mw, "Gym Rematches", "Could not open rematches: %s" % e)
 
     def _go(self, exp):
         self.accept()
@@ -603,6 +792,73 @@ def open_menu():
         _run.window.raise_()
         return
     ExpeditionMenu(mw).exec()
+
+
+def _all_records() -> List[dict]:
+    try:
+        return list(mw.ankimon_db.get_all_pokemon() or [])
+    except Exception as e:
+        _log("warning", "could not read your Pokemon: %s" % e)
+        return []
+
+
+# Moves a tower teaches on evolving (Sw/Sh: learned on evolution)
+SIGNATURE = {892: "Wicked Blow", 10191: "Surging Strikes"}
+
+
+def evolve_record(rec, to_id, to_name) -> str:
+    """Evolve a saved Pokemon into to_name (a form's id, like Urshifu-Rapid-Strike
+    10191, works too - Ankimon's own evolution looks up growth by that id and fails).
+    Keeps level, IVs/EVs, nature, shiny, held item; new species data, CP and HP."""
+    from ..functions.pokedex_functions import search_pokedex, get_growth_rate, get_base_experience
+    from ..functions.battle_functions import calculate_hp
+    from ..business import calculate_cp_from_dict
+    key = str(to_name).lower()
+    rec = dict(mw.ankimon_db.get_pokemon(rec["individual_id"]) or rec)
+    old = str(rec.get("name") or "")
+    shown = _dn(to_name)
+    if rec.get("nickname") and str(rec["nickname"]).strip().lower() == old.lower():
+        rec["nickname"] = shown          # never renamed: follow the species
+    rec["name"] = shown
+    rec["id"] = int(to_id)
+    rec["type"] = search_pokedex(key, "types")
+    base = search_pokedex(key, "baseStats")
+    rec["base_stats"] = base
+    rec["stats"] = base
+    sid = int(search_pokedex(key, "species_id") or to_id)
+    try:
+        rec["growth_rate"] = get_growth_rate(sid)
+    except Exception:
+        pass
+    try:
+        rec["base_experience"] = get_base_experience(int(search_pokedex(key, "actual_id") or to_id))
+    except Exception:
+        pass
+    ab = search_pokedex(key, "abilities") or {}
+    nums = [v for k, v in ab.items() if str(k).isdigit()] if isinstance(ab, dict) else []
+    if nums:
+        rec["ability"] = random.choice(nums)
+    sig = SIGNATURE.get(int(to_id))
+    atk = list(rec.get("attacks") or [])
+    if sig and sig.lower() not in [str(a).lower() for a in atk]:
+        if len(atk) < 4:
+            atk.append(sig)
+        else:
+            try:
+                from ..pyobj.attack_dialog import AttackDialog
+                dlg = AttackDialog(atk, sig)
+                if dlg.exec() == QDialog.DialogCode.Accepted and dlg.selected_attack in atk:
+                    atk[atk.index(dlg.selected_attack)] = sig
+            except Exception as e:
+                _log("warning", "move prompt failed: %s" % e)
+    rec["attacks"] = atk
+    rec["xp"] = 0
+    rec["current_hp"] = int(calculate_hp(int(base["hp"]), rec["level"], rec["ev"], rec["iv"]))
+    rec["cp"] = calculate_cp_from_dict(rec)
+    rec["evolution_rejected"] = False
+    mw.ankimon_db.save_pokemon(rec)
+    ExpeditionRun._sync_live(rec.get("individual_id"))
+    return shown
 
 
 def _dn(n):

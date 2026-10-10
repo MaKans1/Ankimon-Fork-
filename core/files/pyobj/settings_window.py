@@ -31,6 +31,11 @@ _PACED = ("gym.reviews_per_gym", "gym.retry_cost_reviews",
           "gym.decline_cooldown_reviews", "battle.defeat_xp_multiplier")
 
 
+# Settings shown as a choice of labelled options: key -> [(stored value, label)]
+_CHOICES = {"battle.upgrade_priority": [("level", "Prioritize Level"),
+                                        ("iv", "Prioritize Average IV")]}
+
+
 # create_rounded_pixmap function remains the same
 def create_rounded_pixmap(source_pixmap, radius):
     if source_pixmap.isNull():
@@ -227,6 +232,23 @@ class SettingsWindow(QMainWindow):
         layout.addWidget(description_label)
         created_widgets.extend([label, description_label])
 
+        if key in _CHOICES:
+            radio_container = QWidget()
+            h_layout = QHBoxLayout(radio_container)
+            h_layout.setContentsMargins(0, 0, 0, 0)
+            button_group = QButtonGroup(self)
+            for opt_value, opt_label in _CHOICES[key]:
+                rb = QRadioButton(opt_label)
+                rb.setChecked(str(value).strip().lower() == opt_value)
+                button_group.addButton(rb)
+                h_layout.addWidget(rb)
+            if button_group.checkedButton() is None:
+                button_group.buttons()[-1].setChecked(True)
+            layout.addWidget(radio_container)
+            created_widgets.append(radio_container)
+            self.input_widgets[key] = button_group
+            return created_widgets, friendly_name, description
+
         if isinstance(value, bool):
             radio_container = QWidget()
             h_layout = QHBoxLayout(radio_container)
@@ -329,7 +351,7 @@ class SettingsWindow(QMainWindow):
                 },
             },
             "Battle": {
-                "settings": ["Replace Duplicate Catches", "Duplicate Level Window", "Wild Levels Follow Badges",  # battle log popup -> Wild Battle Popups 
+                "settings": ["Replace Duplicate Catches", "Upgrade Behavior", "Duplicate Level Window", "Wild Levels Follow Badges",  # battle log popup -> Wild Battle Popups 
                     "Automatic Battle",
                     "Cards per Round",
                     "Show Main Pokémon in Reviewer",
@@ -351,6 +373,8 @@ class SettingsWindow(QMainWindow):
                             "Show XP Popups",
                             "Show Level-Up and New Move Popups",
                             "Show Catch Popups",
+                            "Show Rematch Ready Popup",
+                            "Show Item Pickup Popups",
                         ]
                     },
                     "Hotkeys": {
@@ -463,6 +487,7 @@ class SettingsWindow(QMainWindow):
                 lambda _, t=l1_title, b=l1_button: self._toggle_group_visibility(t, b)
             )
         self._wire_pacing()
+        self._wire_upgrade_choice()
         scroll_area_layout.addStretch()
         layout.addWidget(scroll_area)
         save_button = QPushButton("Save")
@@ -527,6 +552,19 @@ class SettingsWindow(QMainWindow):
                 w.textChanged.connect(self._update_pacing_hints)
                 w.editingFinished.connect(lambda k=which: self._on_pacing_edited(k))
         self._update_pacing_hints()
+
+    def _wire_upgrade_choice(self):
+        """Duplicate Level Window only matters with Prioritize Average IV."""
+        grp = self.input_widgets.get("battle.upgrade_priority")
+        win = self.input_widgets.get("battle.duplicate_level_window")
+        if grp is None or win is None:
+            return
+
+        def sync(*_):
+            b = grp.checkedButton()
+            win.setEnabled(bool(b) and b.text() == "Prioritize Average IV")
+        grp.buttonClicked.connect(sync)
+        sync()
 
     def show_window(self):
         self._apply_stylesheet()
@@ -619,7 +657,12 @@ class SettingsWindow(QMainWindow):
                 else:
                     self.config[key] = str(new_text)
             elif isinstance(widget, QButtonGroup):
-                self.config[key] = widget.checkedButton().text() == "Enabled"
+                if key in _CHOICES:
+                    picked = widget.checkedButton().text() if widget.checkedButton() else ""
+                    self.config[key] = next((v for v, lbl in _CHOICES[key] if lbl == picked),
+                                            _CHOICES[key][-1][0])
+                else:
+                    self.config[key] = widget.checkedButton().text() == "Enabled"
         # --- Enforce bounds for cash rewards ---
         has_adjustments = False
         adjustment_msg = ""

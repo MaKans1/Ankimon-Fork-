@@ -104,8 +104,14 @@ class Pokedex(QDialog):
         url.setQuery(query)
         #print("POKEDEX_DEBUG: Final URL:", url.toString())
 
-        self.webview.setUrl(url)
+        # A changed URL loads the fresh list by itself. Calling reload() right
+        # after setUrl() reloaded the page already showing (Chromium reloads the
+        # last committed page and drops the pending load), so the Pokedex kept
+        # showing your collection as it was when Anki started.
+        if self.webview.url() == url:
+            self.webview.reload()
+        else:
+            self.webview.setUrl(url)
 
     def showEvent(self, event):
         self.load_html()
-        self.webview.reload()

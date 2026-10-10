@@ -34,7 +34,7 @@ from .gym_state import (
     Combatant, GymSession, GymProgress, TEAM_SIZE, RETRY_COST_REVIEWS,
     STRUGGLE,
 )
-from .gym_data import get_gym, next_gym
+from .gym_data import get_gym, next_gym, GYM
 from . import gym_engine as GE          # also applies the global move fixes
 from . import gym_showdown as GS        # real-game rules via Pokemon Showdown
 
@@ -124,6 +124,12 @@ def build_leader_team(gym) -> List[Combatant]:
             name=p.name, level=p.level, max_hp=int(p.max_hp), hp=int(p.max_hp),
             attacks=list(p.attacks), species_id=p.id, is_player=False, source=p,
             pp=dict(pp), max_pp=dict(pp)))
+    if getattr(gym, "totem", None) and out:
+        out[0].name = "Totem %s" % out[0].name      # Alola: the totem leads; gymsim/gym_engine key on it
+    if getattr(gym, "dynamax", "") == "gmax" and out:
+        out[-1].gigantamax = True                   # Galar: the ace Gigantamaxes (gym_showdown passes it)
+    if getattr(gym, "tera_rolled", "") and out:
+        out[-1].tera_type = gym.tera_rolled         # Paldea: the ace's Tera type, rolled for this fight
     return out
 
 
@@ -148,6 +154,9 @@ def _obj_from_saved(rec) -> Optional[PokemonObject]:
             tier=rec.get("tier", "Normal"),
             captured_date=rec.get("captured_date"),
             individual_id=rec.get("individual_id") or str(uuid.uuid4()),
+            # the held item goes into the fight (Showdown applies it; a
+            # Z-Crystal is what makes a Z-Move possible)
+            held_item=rec.get("held_item") or None,
         )
         # ALWAYS FULL HP at gym start. The saved record's current_hp is
         # ignored on purpose: you picked this Pokemon for a gym run, you
@@ -276,11 +285,13 @@ def _engine(session: GymSession):
     """The fight's single engine State, built on the first turn."""
     if session.engine is None:
         session.engine = GE.EngineBattle(session.player_team, session.leader_team,
-                                         leader_label=session.gym.leader)
+                                         leader_label=session.gym.leader,
+                                         totem=getattr(session.gym, "totem", None),
+                                         titan=getattr(session.gym, "titan", None))
     return session.engine
 
 
-def run_turn(session: GymSession, forced_move: Optional[str] = None):
+def run_turn(session: GymSession, forced_move: Optional[str] = None, z=None, dmax=None, tera=None):
     """Resolve one gym turn. Returns a list of battle-log lines.
 
     forced_move: the move the player chose in the gym window (manual mode).
@@ -290,7 +301,7 @@ def run_turn(session: GymSession, forced_move: Optional[str] = None):
     if session.finished:
         return []
     if isinstance(session.engine, GS.ShowdownBattle):
-        return _showdown_turn(session, session.engine, forced_move)
+        return _showdown_turn(session, session.engine, forced_move, z, dmax, tera)
     try:
         eng = _engine(session)
     except Exception as e:
@@ -315,11 +326,15 @@ def run_turn(session: GymSession, forced_move: Optional[str] = None):
         _log("error", "move choice failed: %s" % e)
         return []
 
+    withdraw = eng.totem_withdrawal() if hasattr(eng, "totem_withdrawal") else None
     p.spend_pp(p_move)
-    l.spend_pp(l_move)
-    header = "%s used %s. %s used %s." % (
-        p.name, str(p_move).replace("-", " ").title(),
-        l.name, str(l_move).replace("-", " ").title())
+    if withdraw:                        # the totem calls for help instead of attacking
+        header = "%s used %s." % (p.name, str(p_move).replace("-", " ").title())
+    else:
+        l.spend_pp(l_move)
+        header = "%s used %s. %s used %s." % (
+            p.name, str(p_move).replace("-", " ").title(),
+            l.name, str(l_move).replace("-", " ").title())
     try:
         lines = eng.turn(p_move, l_move)
     except Exception as e:
@@ -332,7 +347,7 @@ def run_turn(session: GymSession, forced_move: Optional[str] = None):
     return [header] + session.record_turn(lines)
 
 
-def _showdown_turn(session: GymSession, sd, forced_move):
+def _showdown_turn(session: GymSession, sd, forced_move, z=None, dmax=None, tera=None):
     """One turn on Pokémon Showdown's simulator. Showdown owns HP, status, PP,
     locked moves (Petal Dance, Outrage...) and faint replacement; the log it
     returns is already readable ("Your Growlithe used Flame Wheel!")."""
@@ -346,7 +361,7 @@ def _showdown_turn(session: GymSession, sd, forced_move):
     except Exception:
         smart = True
     try:
-        lines = sd.play_turn(move, smart=smart)
+        lines = sd.play_turn(move, smart=smart, z=z, dmax=dmax, tera=tera)
     except Exception as e:
         _log("error", "Showdown engine failed; continuing this fight on the classic engine: %s" % e)
         session.engine = _classic_from_current(session, sd)
@@ -370,14 +385,69 @@ def _classic_from_current(session: GymSession, sd):
         alive = [c for c in team if c.hp > 0]
         return ([act] if act in alive else []) + [c for c in alive if c is not act]             + [c for c in team if c.hp <= 0]
     return GE.EngineBattle(order(session.player_team, p_act), order(session.leader_team, l_act),
-                           leader_label=session.gym.leader)
+                           leader_label=session.gym.leader,
+                          totem=getattr(session.gym, "totem", None),
+                                         titan=getattr(session.gym, "titan", None))
 
 
 # --------------------------------------------------------------- rewards ---
+# Z items in the post-battle recap: the Z-Move gold (gym_window's Z button).
+# Notes are plain text; zspan() marks a stretch that notes_html() turns gold.
+Z_GOLD = "#f4b400"
+_Z_OPEN, _Z_CLOSE = "[[z]]", "[[/z]]"
+
+
+def zspan(text: str) -> str:
+    return "%s✦ %s%s" % (_Z_OPEN, text, _Z_CLOSE)
+
+
+# Galar / Paldea / Titan rewards get their own colours in the recap
+_COLOURS = {"d": "#a855f7", "t": "#22d3ee", "h": "#4ade80", "s": "#22d3ee"}
+
+
+def dspan(text: str) -> str:           # Dynamax (purple)
+    return "[[d]]◆ %s[[/d]]" % text
+
+
+def tspan(text: str) -> str:           # Tera (cyan)
+    return "[[t]]◈ %s[[/t]]" % text
+
+
+def sspan(text: str) -> str:           # Tera Shards (light blue)
+    return "[[s]]◈ %s[[/s]]" % text
+
+
+def hspan(text: str) -> str:           # Herba Mystica (green)
+    return "[[h]]✿ %s[[/h]]" % text
+
+
+def notes_html(lines) -> str:
+    """The recap lines as rich text: escaped, one per line, Z items in gold."""
+    import html
+    out = []
+    for line in lines:
+        s = html.escape(str(line))
+        s = s.replace(_Z_OPEN, '<span style="color:%s; font-weight:bold;">' % Z_GOLD)
+        s = s.replace(_Z_CLOSE, "</span>")
+        for k, colour in _COLOURS.items():
+            s = s.replace("[[%s]]" % k, '<span style="color:%s; font-weight:bold;">' % colour)
+            s = s.replace("[[/%s]]" % k, "</span>")
+        out.append(s)
+    return "<br>".join(out)
+
+
+def _item_name(item) -> str:
+    try:
+        from ..utils import item_display_name
+        return item_display_name(item)
+    except Exception:
+        return str(item).replace("-", " ").title()
+
+
 def award_victory(session: GymSession):
     """Badge, cash and XP — written to the real saved Pokémon, not the copies."""
     gym = session.gym
-    notes = []
+    notes, z_loot = [], []
     try:
         cash = int(settings_obj.get("trainer.cash") or 0)
         settings_obj.set("trainer.cash", cash + gym.cash_reward)
@@ -398,20 +468,102 @@ def award_victory(session: GymSession):
             _log("warning", "xp award failed for %s: %s" % (c.name, e))
     if survivors:
         notes.append("%d XP to each surviving Pokémon." % xp_each)
-    notes.append("You earned the %s!" % gym.badge_name)
+    if getattr(gym, "is_rematch", False):
+        notes.append("Rematch won against %s (Lv %d)!" % (gym.leader, int(getattr(gym, "rematch_level", 0) or 0)))
+    else:
+        if getattr(gym, "is_test", False):
+            notes.append("Test fight: no badge or ladder progress recorded.")
+        elif getattr(gym, "titan", None):
+            notes.append("You beat the %s!" % gym.name)      # Titans give no badge
+        else:
+            notes.append("You earned the %s!" % gym.badge_name)
+        if getattr(gym, "z_crystal", ""):       # Alola: the Z-Crystal goes in the bag
+            try:
+                from ..utils import give_item
+                give_item(gym.z_crystal)
+                z_loot.append(zspan(_item_name(gym.z_crystal)))    # leads the Loot line, in gold
+            except Exception as e:
+                _log("warning", "Z-Crystal failed: %s" % e)
+        if getattr(gym, "totem", None):         # your first totem trial: the Z-Ring
+            try:
+                from . import zmoves
+                if not zmoves.has_ring():
+                    from ..utils import give_item
+                    give_item(zmoves.Z_RING)
+                    notes.append("You received the %s! A Pokémon holding a Z-Crystal can now "
+                                 "use its Z-Move once per gym battle (Give to hold, in the bag)."
+                                 % zspan("Z-Ring"))
+            except Exception as e:
+                _log("warning", "Z-Ring failed: %s" % e)
+        region = str(getattr(gym, "region", "") or "")
+        if region == "Galar" and getattr(gym, "kind", "") == GYM:    # your first Galar gym: the Dynamax Band
+            try:
+                from . import dmax as _dm
+                if not _dm.has_band():
+                    from ..utils import give_item
+                    give_item(_dm.DYNAMAX_BAND)
+                    notes.append("You received the %s! Your Pokémon can now Dynamax once per battle in "
+                                 "Galar's gyms and battles." % dspan("Dynamax Band"))
+            except Exception as e:
+                _log("warning", "Dynamax Band failed: %s" % e)
+        if region == "Galar":                                     # Kubfu joins after Milo
+            try:
+                from . import galar as _gl
+                n = _gl.kubfu_gift(gym)
+                if n:
+                    notes.append(n)
+            except Exception as e:
+                _log("warning", "Kubfu failed: %s" % e)
+        if region == "Paldea" and getattr(gym, "kind", "") == GYM:   # your first Paldea gym: the Tera Orb
+            try:
+                from . import tera as _tr
+                if not _tr.has_orb():
+                    from ..utils import give_item
+                    give_item(_tr.TERA_ORB)
+                    notes.append("You received the %s! Your Pokémon can now Terastallize once per battle "
+                                 "in Paldea's gyms and battles." % tspan("Tera Orb"))
+            except Exception as e:
+                _log("warning", "Tera Orb failed: %s" % e)
+        if getattr(gym, "tera_rolled", ""):         # the Tera Shard their ace used against you
+            try:
+                from . import tera as _tr
+                from ..utils import give_item
+                give_item(_tr.shard_item(gym.tera_rolled))
+                z_loot.append(sspan(_tr.shard_name(gym.tera_rolled)))
+            except Exception as e:
+                _log("warning", "Tera Shard failed: %s" % e)
+        if getattr(gym, "titan", None):             # a Titan: Herba Mystica
+            try:
+                from ..utils import give_item
+                give_item("herba-mystica")
+                z_loot.append(hspan("Herba Mystica"))
+            except Exception as e:
+                _log("warning", "Herba Mystica failed: %s" % e)
 
-    # Boss loot: two draws from the normal item pool (TMs included).
+    # Boss loot: from this leader's themed pool (gym/rewards.py: type TMs,
+    # power item, stone, healing); the normal item pool only if there's none.
+    got = []
     try:
-        from ..utils import random_item
-        got = [_item_label(random_item()) for _ in range(2)]
-        notes.append("Loot: %s." % " and ".join(got))
+        from . import rewards
+        got = rewards.draw(gym.gym_id, version=int(getattr(gym, "rematch_version", 0) or 0),
+                           draws=int(getattr(gym, "loot_draws", 2) or 2))
+        if not got:
+            from ..utils import random_item
+            got = [_item_label(random_item()) for _ in range(2)]
     except Exception as e:
         _log("warning", "loot failed: %s" % e)
+    if z_loot or got:
+        notes.append("Loot: %s." % ", ".join(z_loot + list(got)))
     return notes
 
 
 def _item_label(name) -> str:
     """random_item() returns the item name, or a TM's type sprite for a TM."""
+    try:
+        from ..utils import item_display_name
+        return item_display_name(name)
+    except Exception:
+        pass
     s = str(name or "item")
     if s.startswith("Bag_TM_"):
         return "a %s-type TM" % s.split("_")[2].capitalize()
@@ -420,6 +572,25 @@ def _item_label(name) -> str:
 
 def finish_session(session: GymSession, progress: GymProgress, review_count: int):
     """Close out a gym. Leaving discards the damaged copies, which is the heal."""
+    if getattr(session.gym, "is_legend", False):
+        # roaming legendaries / mythicals (legends.py): catch or flee, no progress
+        from . import legends
+        notes = legends.finish(session)
+        _log("info", session.summary())
+        return notes
+    if getattr(session.gym, "is_test", False):
+        # a test fight (Game > Test): the real battle and rewards, but no
+        # badge, ladder progress or cooldown
+        notes = (award_victory(session) if session.status == GymSession.WON
+                 else ["Your team is healed. Test fight: nothing was recorded."])
+        _log("info", session.summary())
+        return notes
+    if getattr(session.gym, "is_rematch", False):
+        # rematches never touch badges or gym progress
+        notes = (award_victory(session) if session.status == GymSession.WON
+                 else ["Your team is healed. Your next rematch comes with your next gym interval."])
+        _log("info", session.summary())
+        return notes
     if session.status == GymSession.WON:
         progress.record_win(session.gym.gym_id, review_count, str(date.today()))
         notes = award_victory(session)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build Ankimon 2.0 - for maintainers making a release. Players just download
+Build Ankimon 2.5 - for maintainers making a release. Players just download
 the files this makes from the Releases page.
 
     python build.py                          # the release files (below)
@@ -8,9 +8,13 @@ the files this makes from the Releases page.
     python build.py --list                   # the packages and what they need
 
 Release files, in dist/release:
-    Ankimon-2.0.ankiaddon          everything - double-click to install
-    Ankimon-2.0-core.ankiaddon     the core only
-    Ankimon-2.0-<package>.zip      one per package: unzip and drag its contents
+    Ankimon-2.5.ankiaddon          everything - double-click to install
+    Ankimon.ankiaddon              the same file under a name that never changes
+                                   (Help > Update and the README link to it)
+    Ankimon-2.0.ankiaddon          the same file again: 2.0's Help > Update asks
+                                   for this name, so 2.0 players update in one click
+    Ankimon-2.5-core.ankiaddon     the core only
+    Ankimon-2.5-<package>.zip      one per package: unzip and drag its contents
                                    into the Ankimon add-on folder
 Needs only Python 3.8+; nothing is downloaded.
 """
@@ -26,7 +30,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CORE = os.path.join(HERE, "core", "files")
 PACKAGES = os.path.join(HERE, "packages")
 DIST = os.path.join(HERE, "dist")
-VERSION = "2.0"
+VERSION = "2.5"
+# Copies of the full file under fixed names: "Ankimon" (what 2.5+ link to) and
+# "Ankimon-2.0" (what 2.0's Help > Update downloads)
+ALIASES = ("Ankimon.ankiaddon", "Ankimon-2.0.ankiaddon")
 
 
 def load_packages():
@@ -85,7 +92,7 @@ def assemble(chosen, out):
 
 def main():
     pk = load_packages()
-    ap = argparse.ArgumentParser(description="Build Ankimon 2.0")
+    ap = argparse.ArgumentParser(description="Build Ankimon 2.5")
     ap.add_argument("--packages", help="build one .ankiaddon with these (comma-separated)")
     ap.add_argument("--list", action="store_true", help="list packages and exit")
     a = ap.parse_args()
@@ -111,6 +118,8 @@ def main():
     os.makedirs(rel)
     work = os.path.join(DIST, "_work")
     zip_folder(assemble(list(pk), work), os.path.join(rel, "Ankimon-%s.ankiaddon" % VERSION))
+    for alias in ALIASES:
+        shutil.copyfile(os.path.join(rel, "Ankimon-%s.ankiaddon" % VERSION), os.path.join(rel, alias))
     zip_folder(assemble([], work), os.path.join(rel, "Ankimon-%s-core.ankiaddon" % VERSION))
     shutil.rmtree(work, ignore_errors=True)
     for p in pk:

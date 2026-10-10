@@ -385,7 +385,12 @@ def generate_random_pokemon(
     growth_rate = get_growth_rate(pokemon_id)
     ev_yield = get_effort_values(search_pokedex(name, "actual_id"))
     gender = pick_random_gender(name)
-    is_shiny = shiny_chance()
+    try:
+        from ..wild import wild_rules as _wsb
+        _boost = _wsb.shiny_boost()              # Herba Mystica (Paldea)
+    except Exception:
+        _boost = 1
+    is_shiny = shiny_chance(_boost)
     try:
         from ..wild import wild_rules as _wild
         if _wild.consume_shiny_block():
@@ -417,6 +422,13 @@ def generate_random_pokemon(
     # mu = 31 * (1 - math.exp(-ankimon_tracker_obj.total_reviews / tau))  # At total reviews > 3 * tau, we get mu ~= 31
     # iv = {stat: iv_rand_gauss(mu=mu, sigma=5) for stat in stat_names}  # The higher the number of reviews, the higher the IVs
     iv = {stat: random.randint(0, 31) for stat in stat_names}
+    # Alpha spawns (the strong ~10%): every IV at least ~33%
+    try:
+        from ..wild import wild_rules as _wild
+        if _wild.consume_alpha() and not _special:
+            iv = _wild.alpha_ivs(iv)       # every IV 16-31, never a forced 31
+    except Exception:
+        pass
     final_stats = base_stats
 
     ankimon_tracker_obj.pokemon_encounter = 0  # 0: Start of Battle: 1: Current Battle
@@ -856,14 +868,91 @@ def _average_iv(rec):
 _DUP_NOTE = [""]    # result of the last duplicate check, shown with the catch
 
 
-def _duplicate_verdict(caught, window=None):
-    """(keep, best_owned, why) for a wild Pokémon against the copy you own.
+def _upgrade_priority():
+    """Settings > Upgrade Behavior: "level" or "iv" (default)."""
+    try:
+        v = str(settings_obj.get("battle.upgrade_priority") or "iv").strip().lower()
+    except Exception:
+        v = "iv"
+    return "level" if v in ("level", "prioritize level") else "iv"
 
-    Regular and shiny copies are separate one-per-species slots: a wild shiny
-    is compared only with your shiny copy, a regular one only with your
-    regular copy. best_owned is None when that slot is empty (always keep).
-    Outside the level window the higher level wins; inside it the higher
+
+_BRANCH_CACHE = {}
+# Evolutions only a regional form can take (Galarian Meowth -> Perrserker,
+# Paldean Wooper -> Clodsire, Hisuian Sneasel -> Sneasler, Galarian Yamask ->
+# Runerigus). Ankimon doesn't spawn those forms, so they don't add a slot.
+_REGIONAL_ONLY = {863, 980, 903, 867}
+
+
+def _branch_slots(species_id):
+    """How many copies of a species you keep: one per final species it can
+    still evolve into (Eevee 8, Ralts and Kirlia 2, Tyrogue 3); 1 otherwise."""
+    try:
+        sid = int(species_id)
+    except (TypeError, ValueError):
+        return 1
+    if sid in _BRANCH_CACHE:
+        return _BRANCH_CACHE[sid]
+    n = 1
+    try:
+        from .pokedex_functions import pokemon_evolves_from_id
+        seen, leaves, stack = set(), set(), [sid]
+        while stack:
+            cur = stack.pop()
+            if cur in seen:
+                continue
+            seen.add(cur)
+            kids = []
+            for k in (pokemon_evolves_from_id(cur) or []):
+                try:
+                    kids.append(int(k))
+                except (TypeError, ValueError):
+                    pass
+            kids = [k for k in kids if k not in _REGIONAL_ONLY]
+            if not kids and cur != sid:
+                leaves.add(cur)
+            stack.extend(kids)
+        n = max(1, len(leaves))
+    except Exception:
+        n = 1
+    _BRANCH_CACHE[sid] = n
+    return n
+
+
+def _vs(caught, mine, window):
+    """(keep, why): is the wild one better than this copy of yours?
+    Prioritize Level: the higher level wins, IVs break a tie. Prioritize IV:
+    outside the level window the higher level wins; inside it the higher
     average IV wins, whichever of the two is higher level."""
+    wild_lv = int(caught.get("level") or 0)
+    own_lv = int(mine.get("level") or 0)
+    diff = wild_lv - own_lv
+    if _upgrade_priority() == "level":
+        if diff > 0:
+            return True, "Lv %d -> Lv %d" % (own_lv, wild_lv)
+        if diff == 0:
+            wiv, oiv = _average_iv(caught), _average_iv(mine)
+            if wiv > oiv:
+                return True, "same level, better IVs"
+            return False, "same level, yours has IVs as good"
+        return False, "yours is higher level (Lv %d vs Lv %d)" % (own_lv, wild_lv)
+    if diff > window:
+        return True, "Lv %d -> Lv %d" % (own_lv, wild_lv)
+    if abs(diff) <= window:
+        wiv, oiv = _average_iv(caught), _average_iv(mine)
+        if wiv > oiv:
+            return True, "better IVs"
+        return False, "yours has IVs as good"
+    return False, "yours is higher level (Lv %d vs Lv %d)" % (own_lv, wild_lv)
+
+
+def _duplicate_verdict(caught, window=None):
+    """(keep, owned_copy, why) for a wild Pokémon against the copies you own.
+
+    Regular and shiny copies are separate slots. Most species keep one copy;
+    a species that evolves in different ways keeps one per final evolution
+    (_branch_slots). owned_copy is the copy to replace, or None when the new
+    one is simply kept (a free slot)."""
     if window is None:
         try:
             window = int(settings_obj.get("battle.duplicate_level_window") or 5)
@@ -875,18 +964,30 @@ def _duplicate_verdict(caught, window=None):
              if p and p.get("id") == species_id and bool(p.get("shiny")) == shiny]
     if not owned:
         return True, None, "first shiny" if shiny else "new species"
-    best = max(owned, key=lambda p: (int(p.get("level") or 0), _average_iv(p)))
-    wild_lv = int(caught.get("level") or 0)
-    own_lv = int(best.get("level") or 0)
-    diff = wild_lv - own_lv
-    if diff > window:
-        return True, best, "Lv %d -> Lv %d" % (own_lv, wild_lv)
-    if abs(diff) <= window:
-        wiv, oiv = _average_iv(caught), _average_iv(best)
-        if wiv > oiv:
-            return True, best, "better IVs (average %.1f vs %.1f)" % (wiv, oiv)
-        return False, best, "yours has IVs as good (average %.1f vs %.1f)" % (oiv, wiv)
-    return False, best, "yours is higher level (Lv %d vs Lv %d)" % (own_lv, wild_lv)
+    slots = _branch_slots(species_id)
+    if slots > 1 and len(owned) < slots:
+        return True, None, "it evolves %d ways, so you keep %d (this is #%d)" % (slots, slots, len(owned) + 1)
+    if slots <= 1:
+        best = max(owned, key=lambda p: (int(p.get("level") or 0), _average_iv(p)))
+        # Favourites are never replaced, whatever the Upgrade Behavior
+        if best.get("is_favorite"):
+            return False, best, "your %s is a favourite" % str(best.get("name") or "copy")
+        keep, why = _vs(caught, best, window)
+        return keep, best, why
+    # every slot taken: try to beat your weakest copy that isn't a favourite
+    level_first = _upgrade_priority() == "level"
+    pool = sorted((p for p in owned if not p.get("is_favorite")),
+                  key=lambda p: ((int(p.get("level") or 0), _average_iv(p)) if level_first
+                                 else (_average_iv(p), int(p.get("level") or 0))))
+    if not pool:
+        return False, owned[0], "all %d of yours are favourites" % len(owned)
+    first_why = None
+    for p in pool:
+        keep, why = _vs(caught, p, window)
+        if keep:
+            return True, p, "%s (replacing your weakest of %d)" % (why, slots)
+        first_why = first_why or why
+    return False, pool[0], "%s - even your weakest of %d" % (first_why, slots)
 
 
 def is_catch_upgrade(enemy_pokemon):
@@ -923,9 +1024,11 @@ def resolve_duplicate_catch(caught, logger=None):
         shiny = bool(caught.get("shiny"))
         name = ("shiny " if shiny else "") + str(caught.get("name", "?"))
         if best is None:
-            if shiny:
+            if shiny and why == "first shiny":
                 _DUP_NOTE[0] = "Shiny! Your first shiny %s." % caught.get("name", "?")
-            return caught.get("individual_id")          # new species / first shiny
+            elif why not in ("new species", "first shiny"):
+                _DUP_NOTE[0] = "Kept your new %s: %s." % (name, why)
+            return caught.get("individual_id")          # new species / first shiny / a free slot
         if not keep:
             _DUP_NOTE[0] = "Released it - %s." % why
             if logger:

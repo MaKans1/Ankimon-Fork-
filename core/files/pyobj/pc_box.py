@@ -1402,6 +1402,15 @@ class PokemonPC(QDialog):
             if item_data.get("type") is None:
                 items_names.append(item.get("item_name") or item_data.get("item", ""))
         items_names = [n for n in items_names if n]  # Remove empty strings
+        # Z-Crystals only for a Pokémon that knows a move of that type right
+        # now; the Z-Ring is a key item, never held
+        try:
+            from ..gym import zmoves as _zm
+            from ..utils import REWARD_ONLY as _keys
+            items_names = [n for n in items_names if n != _zm.Z_RING and n not in _keys
+                           and (not _zm.crystal_type(n) or _zm.can_use_crystal(pokemon, n))]
+        except Exception:
+            pass
         pokemon_obj = PokemonObject.from_dict(pokemon)
 
         def func(item_name: str):

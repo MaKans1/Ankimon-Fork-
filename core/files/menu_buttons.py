@@ -224,9 +224,8 @@ def create_menu_actions(
 
     # Update Ankimon
     def _open_update_dialog():
-        from .pyobj.update_dialog import UpdateDialog
-        dialog = UpdateDialog(parent=mw)
-        dialog.exec()
+        from .ankimon_packages import open_update     # 2.0: one Update file (not the original Ankimon)
+        open_update()
 
     update_action = QAction(mw.translator.translate("ankimon_update_button"), mw)
     update_action.setMenuRole(QAction.MenuRole.NoRole)
@@ -244,6 +243,15 @@ def create_menu_actions(
     config_action.triggered.connect(settings_window.show_window)
     # Show the Settings window
     mw.pokemenu.addAction(config_action)
+
+    def _open_packages():
+        from .ankimon_packages import open_dialog
+        open_dialog()
+
+    packages_action = QAction("Packages...", mw)
+    packages_action.setMenuRole(QAction.MenuRole.NoRole)
+    packages_action.triggered.connect(_open_packages)
+    other_menu.addAction(packages_action)        # Ankimon > Other > Packages...
 
     if debug is True:
         tracker_window_action = QAction(mw.translator.translate("ankimon_tracker_button"), mw)

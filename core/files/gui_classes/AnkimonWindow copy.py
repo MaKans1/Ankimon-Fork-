@@ -510,21 +510,21 @@ class TestWindow(QWidget):
 
         nickname_input = QLineEdit()
         nickname_input.setPlaceholderText("Choose Nickname")
-        nickname_input.setStyleSheet("background-color: rgb(44,44,44);")
+        nickname_input.setStyleSheet("background-color: rgb(44,44,44); color: rgb(240,240,240);")
         nickname_input.setFixedSize(120, 30)  # Adjust the size as needed
 
         # Create buttons for catching and killing the Pokémon
         catch_button = QPushButton("Catch Pokémon")
         catch_button.setFixedSize(175, 30)  # Adjust the size as needed
         catch_button.setFont(QFont("Arial", 12))  # Adjust the font size and style as needed
-        catch_button.setStyleSheet("background-color: rgb(44,44,44);")
+        catch_button.setStyleSheet("background-color: rgb(44,44,44); color: rgb(240,240,240);")
         #catch_button.setFixedWidth(150)
         qconnect(catch_button.clicked, lambda: catch_pokemon(nickname_input.text()))
 
         kill_button = QPushButton("Defeat Pokémon")
         kill_button.setFixedSize(175, 30)  # Adjust the size as needed
         kill_button.setFont(QFont("Arial", 12))  # Adjust the font size and style as needed
-        kill_button.setStyleSheet("background-color: rgb(44,44,44);")
+        kill_button.setStyleSheet("background-color: rgb(44,44,44); color: rgb(240,240,240);")
         #kill_button.setFixedWidth(150)
         qconnect(kill_button.clicked, kill_pokemon)
         # Set the merged image as the pixmap for the QLabel
@@ -545,7 +545,7 @@ class TestWindow(QWidget):
         battle_widget = self.pokemon_display_first_encounter()
         #battle_widget.setScaledContents(True) #scalable ankimon window
         layout.addWidget(battle_widget)
-        self.setStyleSheet("background-color: rgb(44,44,44);")
+        self.setStyleSheet("background-color: rgb(44,44,44); color: rgb(240,240,240);")
         self.setLayout(layout)
         self.setMaximumWidth(556)
         self.setMaximumHeight(300)
@@ -556,7 +556,7 @@ class TestWindow(QWidget):
         item_name = item
         item_widget = self.pokemon_display_item(item_name)
         layout.addWidget(item_widget)
-        Receive_Window.setStyleSheet("background-color: rgb(44,44,44);")
+        Receive_Window.setStyleSheet("background-color: rgb(44,44,44); color: rgb(240,240,240);")
         Receive_Window.setMaximumWidth(512)
         Receive_Window.setMaximumHeight(320)
         Receive_Window.setLayout(layout)
@@ -568,7 +568,7 @@ class TestWindow(QWidget):
         item_name = random_item()
         item_widget = self.pokemon_display_item(item_name)
         layout.addWidget(item_widget)
-        Receive_Window.setStyleSheet("background-color: rgb(44,44,44);")
+        Receive_Window.setStyleSheet("background-color: rgb(44,44,44); color: rgb(240,240,240);")
         Receive_Window.setMaximumWidth(512)
         Receive_Window.setMaximumHeight(320)
         Receive_Window.setLayout(layout)
@@ -580,7 +580,7 @@ class TestWindow(QWidget):
         layout = QHBoxLayout()
         badge_widget = self.pokemon_display_badge(badge_num)
         layout.addWidget(badge_widget)
-        Receive_Window.setStyleSheet("background-color: rgb(44,44,44);")
+        Receive_Window.setStyleSheet("background-color: rgb(44,44,44); color: rgb(240,240,240);")
         Receive_Window.setMaximumWidth(512)
         Receive_Window.setMaximumHeight(320)
         Receive_Window.setLayout(layout)
@@ -599,7 +599,7 @@ class TestWindow(QWidget):
         button_layout.addWidget(nickname_input)
         button_widget.setLayout(button_layout)
         layout.addWidget(button_widget)
-        self.setStyleSheet("background-color: rgb(177,147,209);")
+        self.setStyleSheet("background-color: rgb(177,147,209); color: rgb(20,20,20);")
         self.setLayout(layout)
         self.setMaximumWidth(500)
         self.setMaximumHeight(300)
