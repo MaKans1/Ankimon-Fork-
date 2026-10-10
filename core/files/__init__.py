@@ -30,6 +30,12 @@ try:                # Ankimon 2.0: switch off the packages you don't use, before
 except Exception:
     pass
 
+try:                # Ankimon 2.5: let Anki update Ankimon while it runs (closes the save file first)
+    from . import update_guard
+    update_guard.install()
+except Exception:
+    pass
+
 from .singletons import (
     settings_obj,
     settings_window,

@@ -216,7 +216,10 @@ def open_update():
                 "<li>Double-click the file (or Tools &gt; Add-ons &gt; Install from file).</li>"
                 "<li>Restart Anki.</li></ol>"
                 "Your Pokémon, items and progress are kept, and so are your packages "
-                "(now: %s - change them in Ankimon &gt; Other &gt; Packages)." % (", ".join(on) or "core only"))
+                "(now: %s - change them in Ankimon &gt; Other &gt; Packages).<br><br>"
+                "<small>If Anki ever says <i>Access is denied</i>: close Anki, start it while holding "
+                "<b>Shift</b> (add-ons off for that session), then Tools &gt; Add-ons &gt; Install from file "
+                "and pick the downloaded file. Restart Anki.</small>" % (", ".join(on) or "core only"))
     dl = box.addButton("Download", QMessageBox.ButtonRole.AcceptRole)
     news = box.addButton("What's new", QMessageBox.ButtonRole.HelpRole)
     box.addButton("Close", QMessageBox.ButtonRole.RejectRole)
