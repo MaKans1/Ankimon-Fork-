@@ -102,6 +102,7 @@ These moves do nothing in Ankimon's one-on-one battles, or only help the opponen
 - **Ankimon > Other > Packages…** switches gyms, wild and showdown on or off (restart to apply). Your Pokémon and progress are kept either way.
 - **One update file for everyone:** updating with the full file keeps the packages you had, including for players who installed only some of them.
 - **Help > Update** downloads the newest Ankimon 2.x (Ankimon.ankiaddon) and shows the steps. It used to download the original Ankimon, which would have replaced 2.x. In 2.0 the same button gets 2.5.
+- **Updating from inside Anki works:** when Anki installs an Ankimon update, Ankimon first closes its save file and log (on Windows the update used to stop with "Access is denied").
 - **New items:** Z-Ring and Z-Crystals (Alola), Dynamax Band (Galar), Tera Orb and Tera Shards (Paldea), Herba Mystica (eat it from the bag) and the four ruinous stakes. Key items have no Use button, and none of these are random drops.
 - Package files that live in user_files (badge art, the Showdown helper) now update with the add-on. Before, Anki kept the old copies.
 - The core runs with any combination of packages:

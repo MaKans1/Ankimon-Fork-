@@ -14,6 +14,8 @@
 
 It's the same file for everyone, whether you installed everything or only some packages. Ankimon keeps the packages you had, and your Pokémon and progress. In Anki, **Ankimon > Help > Update > Download** gets the same file, in 2.0 too (it downloads 2.5). On the first start after updating, the new badges, item art and battle files are put in place by themselves. Updates come out at most once a day. *Last updated: Oct 10, 2026.*
 
+**If Anki says "Access is denied" while updating** (on Windows, Ankimon 2.0 and the first 2.5 download keep their save file open, and Windows won't let Anki move it): close Anki, start it again while holding **Shift** (add-ons stay off for that session), then Tools > Add-ons > Install from file… and choose the downloaded file. Restart Anki. From this version on, Ankimon closes the file itself, so updating the normal way works.
+
 A fan-made overhaul of [Ankimon](https://ankiweb.net/shared/info/1908235722), the Anki add-on that turns your reviews into a Pokémon adventure. Ankimon 2.5 adds gym ladders in all nine regions (with Alola's totem trials, Galar's Dynamax and Paldea's open world and Terastallization), travel between regions, smarter wild battles, legendary expeditions, and a progression curve built to last months at your own daily card goal.
 
 It's split into a **core** (general patches: fixes and quality-of-life changes) and three optional **packages** for the big systems, so you can install only what you want. Each one has a README and a CHANGELOG:
