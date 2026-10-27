@@ -364,6 +364,43 @@ class PokemonTeamDialog(QDialog):
         grid_holder.setLayout(grid)
         layout.addWidget(grid_holder)
 
+        # Ankimon 2.5: sort the list (after the type filter and the search)
+        sort_box = QComboBox()
+        for _s in ("Name (A-Z)", "Pokédex number", "Average IV (highest first)", "Level (highest first)"):
+            sort_box.addItem(_s)
+        sort_box.setCurrentIndex(int(getattr(type(self), "_pick_sort", 0)))
+        layout.addWidget(QLabel("Sort by:"))
+        layout.addWidget(sort_box)
+
+        def _dex_no(p):
+            try:
+                i = int(p.get('id') or 0)
+                if i > 10000:                  # a regional form: its species' number
+                    from ..functions.pokedex_functions import search_pokedex
+                    i = int(search_pokedex(str(p.get('name') or '').lower(), "species_id") or i)
+                return i
+            except Exception:
+                return 99999
+
+        def _avg_iv(p):
+            iv = p.get('iv') or {}
+            try:
+                return sum(int(v or 0) for v in iv.values()) / max(1, len(iv))
+            except Exception:
+                return 0
+
+        def _sort(ps):
+            name = lambda p: str(p.get('name') or '').lower()
+            lv = lambda p: int(p.get('level') or 0)
+            i = sort_box.currentIndex()
+            if i == 1:
+                return sorted(ps, key=lambda p: (_dex_no(p), -lv(p)))
+            if i == 2:
+                return sorted(ps, key=lambda p: (-_avg_iv(p), name(p)))
+            if i == 3:
+                return sorted(ps, key=lambda p: (-lv(p), name(p)))
+            return sorted(ps, key=lambda p: (name(p), -lv(p)))
+
         combo_box = QComboBox()
         layout.addWidget(QLabel("Choose a Pokémon:"))
         layout.addWidget(combo_box)
@@ -384,9 +421,9 @@ class PokemonTeamDialog(QDialog):
                 base = list(available_pokemon)
             else:
                 base = [p for p in available_pokemon if picked & self._types_of(p)]
-            return PS.filter_sorted(base, search.text(), lambda p: p.get('name'),
-                                    lambda p: p.get('nickname'), lambda p: p.get('type'),
-                                    lambda p: p.get('level'))
+            return _sort(PS.filter_sorted(base, search.text(), lambda p: p.get('name'),
+                                          lambda p: p.get('nickname'), lambda p: p.get('type'),
+                                          lambda p: p.get('level')))
 
         def update_preview(index):
             pokemon = combo_box.itemData(index)
@@ -444,6 +481,8 @@ class PokemonTeamDialog(QDialog):
         for cb in type_boxes.values():
             cb.toggled.connect(on_type_toggled)
         search.textChanged.connect(lambda _t: refill())
+        sort_box.currentIndexChanged.connect(
+            lambda i: (setattr(type(self), "_pick_sort", i), refill()))
         search.returnPressed.connect(combo_box.showPopup)
         combo_box.currentIndexChanged.connect(
             lambda: update_preview(combo_box.currentIndex()))
@@ -544,6 +583,20 @@ class PokemonTeamDialog(QDialog):
                 }
                 pokemon_names.append(pokemon_name)
 
+        # Ankimon 2.5: your adventure buddy is one of your six (it leads wild
+        # fights; the others rotate in after it). Room left: it joins the team.
+        _bud = self.buddy_iid
+        if _bud and _bud not in [t["individual_id"] for t in team_data]:
+            if len(team_data) < 6:
+                team_data.append({"individual_id": _bud})
+                _bm = self._pokemon_by_iid(_bud)
+                if _bm:
+                    pokemon_names.append({"name": _bm["name"]})
+            else:
+                showWarning("Your adventure buddy has to be one of your six. Swap it into the "
+                            "team, or choose a buddy from your team.", parent=self)
+                return
+
         # Get the selected Pokémon for XP Share
         xp_share_individual_id = self.xp_share_iid
         _xp_mon = self._pokemon_by_iid(xp_share_individual_id) if xp_share_individual_id else None
@@ -557,7 +610,7 @@ class PokemonTeamDialog(QDialog):
         try:
             mw.ankimon_db.save_team(team_data)
 
-            self.logger.log_and_showinfo("info", "Trainer settings saved to database.")
+            self.logger.log("info", "Trainer settings saved to database.")     # one popup, not two
             self.logger.log_and_showinfo("info", f"You chose the following team: [{', '.join([pokemon['name'] for pokemon in pokemon_names])}]\nXP Share: {xp_share_pokemon}")
         except Exception as e:
             self.logger.log_and_showinfo("error", f"Failed to save trainer settings: {e}")

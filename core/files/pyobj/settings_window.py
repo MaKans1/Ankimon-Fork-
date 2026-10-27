@@ -351,7 +351,7 @@ class SettingsWindow(QMainWindow):
                 },
             },
             "Battle": {
-                "settings": ["Replace Duplicate Catches", "Upgrade Behavior", "Duplicate Level Window", "Wild Levels Follow Badges",  # battle log popup -> Wild Battle Popups 
+                "settings": ["Replace Duplicate Catches", "Upgrade Behavior", "Duplicate Level Window", "Keep Duplicates", "Wild Levels Follow Badges",  # battle log popup -> Wild Battle Popups 
                     "Automatic Battle",
                     "Cards per Round",
                     "Show Main Pokémon in Reviewer",

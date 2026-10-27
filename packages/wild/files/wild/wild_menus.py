@@ -239,9 +239,17 @@ class BuddyMenu(QDialog):
             v.addWidget(_small(team_line))
         v.addWidget(_hline())
 
-        v.addWidget(QLabel("<b>Moves</b>"))
-        v.addWidget(_small("Ticked moves are the ones your Pokémon uses against wild "
-                           "Pokémon. Hover a move for details."))
+        # Scaled Moves (user 2026-10-26): while scaling is in effect here (it fights
+        # below its level), a second moveset for capped fights sits beside this one
+        self.scaled = self._scaled_state(mp)
+        self.setMinimumWidth(880 if self.scaled else 460)
+        cols = QHBoxLayout()
+        left = QVBoxLayout()
+        left.addWidget(QLabel("<b>Moves</b>"))
+        left.addWidget(_small("Ticked moves are the ones your Pokémon uses against wild "
+                              "Pokémon. Hover a move for details." if not self.scaled else
+                              "Its full-level moves, used once it fights at its own level again. "
+                              "Hover a move for details."))
         grid = QGridLayout()
         iid = getattr(mp, "individual_id", None)
         self.boxes = []
@@ -268,12 +276,55 @@ class BuddyMenu(QDialog):
             grid.addWidget(info, row, 1)
             grid.addWidget(fb, row, 2)
         grid.setColumnStretch(1, 1)
-        v.addLayout(grid)
+        left.addLayout(grid)
+        left.addStretch(1)
+        cols.addLayout(left, 1)
+        self.sboxes = []
+        if self.scaled:
+            cap, reg, smoves = self.scaled
+            right = QVBoxLayout()
+            right.addWidget(QLabel("<b>Scaled Moves</b>"))
+            right.addWidget(_small("Used while it fights at Lv %d in %s, wild and gym battles alike. "
+                                   "Ticked ones are used against wild Pokémon." % (cap, reg)))
+            sgrid = QGridLayout()
+            for row, mv in enumerate(smoves):
+                name, detail = _move_text(mv)
+                tip = _move_tip(mv)
+                cb = QCheckBox(name)
+                cb.setChecked(W.move_enabled(iid, mv))
+                cb.setToolTip(tip)
+                cb.toggled.connect(lambda on, m=mv, box=cb: self._toggle_scaled(m, on, box))
+                self.sboxes.append(cb)
+                info = _small(detail)
+                info.setToolTip(tip)
+                fb = QPushButton("Forget")
+                fb.setToolTip("Take %s out of its scaled moves (its full-level moves stay as they are)" % name)
+                fb.clicked.connect(lambda _c=False, m=mv: self._forget_scaled(m))
+                sgrid.addWidget(cb, row, 0)
+                sgrid.addWidget(info, row, 1)
+                sgrid.addWidget(fb, row, 2)
+            sgrid.setColumnStretch(1, 1)
+            right.addLayout(sgrid)
+            right.addStretch(1)
+            sep = QFrame()
+            sep.setFrameShape(QFrame.Shape.VLine)
+            sep.setFrameShadow(QFrame.Shadow.Sunken)
+            cols.addWidget(sep)
+            cols.addLayout(right, 1)
+        v.addLayout(cols)
 
         row1 = QHBoxLayout()
         b = QPushButton("Remember a Move...")
         b.clicked.connect(self._remember)
         row1.addWidget(b)
+        if self.scaled:
+            b = QPushButton("Remember a Scaled Move...")
+            b.setToolTip("Add a move it can use at Lv %d to its scaled moves. Its full-level moves "
+                         "stay as they are." % self.scaled[0])
+            b.clicked.connect(self._remember_scaled)
+            row1.addWidget(b)
+            v.addLayout(row1)
+            row1 = QHBoxLayout()
         b = QPushButton("Learn from a TM...")
         b.clicked.connect(self._tm)
         row1.addWidget(b)
@@ -309,6 +360,75 @@ class BuddyMenu(QDialog):
     def _say(self, text):
         self.note_text = text
         self.note.setText(text)
+
+    # --- scaled moves (functions/move_seal.py) ---
+    def _scaled_state(self, mp):
+        """(cap, region, scaled moves) while scaling is in effect for it here, else None."""
+        try:
+            cap = W.level_cap()
+            if not cap or int(mp.level) <= cap:
+                return None
+            from ..functions import move_seal as _ms
+            rec = mw.ankimon_db.get_pokemon(getattr(mp, "individual_id", None))
+            if not rec:
+                return None
+            reg = W.region()
+            moves, changed = _ms.scaled_moves(rec, reg, cap)
+            if changed:
+                sm = dict(rec.get("scaled_moves") or {})
+                sm[reg] = moves
+                rec["scaled_moves"] = sm
+                mw.ankimon_db.save_pokemon(rec)
+            return cap, reg, moves
+        except Exception as e:
+            print("Ankimon: scaled moves unavailable:", e)
+            return None
+
+    def _save_scaled(self, moves):
+        mp = self._mon()
+        rec = mw.ankimon_db.get_pokemon(mp.individual_id)
+        sm = dict(rec.get("scaled_moves") or {})
+        sm[self.scaled[1]] = list(moves)
+        rec["scaled_moves"] = sm
+        mw.ankimon_db.save_pokemon(rec)
+
+    def _toggle_scaled(self, move, on, box):
+        if not on and not any(b.isChecked() for b in self.sboxes):
+            box.blockSignals(True)
+            box.setChecked(True)
+            box.blockSignals(False)
+            self._say("Keep at least one scaled move ticked.")
+            return
+        try:
+            W.set_move_enabled(getattr(self._mon(), "individual_id", None), move, on)
+            self._say("")
+        except Exception as e:
+            self._say("Could not save that: %s" % e)
+
+    def _forget_scaled(self, move):
+        moves = list(self.scaled[2])
+        if len(moves) <= 1:
+            self._say("It needs at least one scaled move.")
+            return
+        self._save_scaled([m for m in moves if m != move])
+        self._build()
+
+    def _remember_scaled(self):
+        """The same Remember Move window as for its full-level moves, listing only
+        the moves it can use at this region's cap; picks go to its scaled moves."""
+        cap, reg, moves = self.scaled
+        mp = self._mon()
+        S = _S()
+        from ..functions import move_seal as _ms
+        from ..gui_classes.pokemon_details import remember_attack_details_window, remember_scaled_attack
+        options = _ms.scaled_candidates(mp.name, list(mp.attacks or []), cap)
+        if not options:
+            self._say("Nothing it can use at Lv %d here yet." % cap)
+            return
+        iid = mp.individual_id
+        remember_attack_details_window(iid, list(moves), options, S.logger,
+                                       on_remember=lambda a: remember_scaled_attack(iid, reg, a, S.logger))
+        self._build()
 
     # --- actions ---
     def _toggle(self, move, on, box):

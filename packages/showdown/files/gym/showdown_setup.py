@@ -125,6 +125,39 @@ def available() -> bool:
         return False
 
 
+def install_now():
+    """Help > Install Showdown: the same download, on demand (after a "Not now")."""
+    global _busy
+    from aqt import mw
+    from aqt.utils import tooltip, showInfo, showWarning, askUser
+    if available():
+        showInfo("Real game battle rules (Pokémon Showdown) are already installed.")
+        return
+    if not (RUNTIME / "bridge.js").exists():
+        showInfo("The showdown package is switched off. Turn it on in Ankimon > Other > Packages, "
+                 "restart Anki, then try again.")
+        return
+    if _busy:
+        tooltip("The battle engine is already downloading.", period=3000)
+        return
+    if not askUser("Download Pokémon Showdown's battle simulator now? It's a one-time download "
+                   "of about 40 MB, and gym battles follow the real games' rules once it's ready."):
+        return
+    _busy = True
+    tooltip("Downloading the battle engine in the background...", period=4000)
+
+    def done(fut):
+        global _busy
+        _busy = False
+        try:
+            fut.result()
+            showInfo("Real game battle rules are ready - they apply from the next gym battle.")
+        except Exception as e:
+            showWarning("Couldn't download the battle engine:\n%s" % e)
+
+    mw.taskman.run_in_background(install, done)
+
+
 def offer():
     """Gym battle starting without the engine: ask (once per session) and
     download in the background. This battle uses the built-in engine unless

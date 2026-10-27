@@ -1829,6 +1829,7 @@ id,identifier,category_id,cost,fling_power,fling_effect_id
 2160,linking-cord,10,8000,,
 10001,black-augurite,10,0,,
 10002,peat-block,10,0,,
+10003,metal-alloy,10,0,,
 20005,megapunch,37,1000,,
 20006,payday,37,1000,,
 20007,firepunch,37,1000,,

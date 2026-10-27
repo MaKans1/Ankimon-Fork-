@@ -134,7 +134,7 @@ def build_leader_team(gym) -> List[Combatant]:
 
 
 # ---------------------------------------------------------------- player ---
-def _obj_from_saved(rec) -> Optional[PokemonObject]:
+def _obj_from_saved(rec, cap=None) -> Optional[PokemonObject]:
     """Rebuild a PokemonObject from a saved captured_pokemon record."""
     try:
         name = rec.get("name", "?")
@@ -144,7 +144,7 @@ def _obj_from_saved(rec) -> Optional[PokemonObject]:
         atks = rec.get("attacks") or rec.get("moves") or ["Tackle"]
         p = PokemonObject(
             name=_dn(name), id=sid, shiny=bool(rec.get("shiny", False)),
-            level=_capped(int(rec.get("level", 5))), ability=rec.get("ability", "None"),
+            level=_capped(int(rec.get("level", 5)), cap), ability=rec.get("ability", "None"),
             type=types, base_stats=base, attacks=list(atks),
             base_experience=rec.get("base_experience", 60),
             growth_rate=rec.get("growth_rate", "medium"),
@@ -163,21 +163,55 @@ def _obj_from_saved(rec) -> Optional[PokemonObject]:
         # should not have to think about leftover damage from wild battles.
         mx = int(p.calculate_max_hp())
         p.max_hp, p.hp, p.current_hp = mx, mx, mx
+        # Fighting below its real level: moves it couldn't have at that level are
+        # sealed for this fight (functions/move_seal.py); all sealed -> its best
+        # level-up moves for that level
+        p.sealed_moves = {}
+        real = int(rec.get("level", 5) or 5)
+        if int(p.level) < real:
+            try:
+                from ..functions import move_seal
+                moves = list(p.attacks)
+                try:                # scaling in effect in this region: its scaled moveset
+                    from ..wild import wild_rules as _w
+                    wcap = _w.level_cap()
+                    if wcap and real > wcap:
+                        moves = move_seal.scaled_moves(rec, _w.region(), wcap)[0]
+                except ImportError:
+                    pass
+                usable, sealed = move_seal.seal(name, moves, int(p.level), real)
+                p.attacks = usable or move_seal.fallback(name, int(p.level))
+                p.sealed_moves = sealed
+            except Exception as e:
+                _log("warning", "move seal skipped: %s" % e)
         return p
     except Exception as e:
         _log("error", "could not rebuild saved Pokémon: %s" % e)
         return None
 
 
-def _capped(level: int) -> int:
-    """Region level cap: anything above it fights at the cap (the saved
-    Pokémon keeps its real level - fights use copies)."""
+def _capped(level: int, cap=None) -> int:
+    """Anything above the cap fights at the cap - never raised to it (the saved
+    Pokémon keeps its real level - fights use copies). cap: the boss's level
+    (boss_level); without one, the region's level cap."""
     try:
-        from .gym_ui import current_cap
-        cap = current_cap()
+        if not cap:
+            from .gym_ui import current_cap
+            cap = current_cap()
         return min(level, cap) if cap else level
     except Exception:
         return level
+
+
+def boss_level(gym):
+    """Gyms, the Elite Four, Champions, wild legendaries and expeditions: your
+    Pokémon above the opponent's strongest level fight at it (user 2026-10-22).
+    None if the team is unknown."""
+    try:
+        lv = max(int(m.level) for m in (getattr(gym, "team", None) or []))
+        return lv if lv > 0 else None
+    except Exception:
+        return None
 
 
 def available_party() -> List[dict]:
@@ -226,12 +260,12 @@ def available_party() -> List[dict]:
     return out
 
 
-def build_player_team(selected: List[dict]) -> List[Combatant]:
+def build_player_team(selected: List[dict], cap=None) -> List[Combatant]:
     """Deep-copies deliberately: damage must never touch the saved Pokémon.
-    Discarding these on exit IS the heal."""
+    Discarding these on exit IS the heal. cap: the boss's level (boss_level)."""
     out = []
     for rec in selected[:TEAM_SIZE]:
-        p = _obj_from_saved(copy.deepcopy(rec))
+        p = _obj_from_saved(copy.deepcopy(rec), cap)
         if p is None:
             continue
         pp = build_pp(p.attacks)
@@ -281,13 +315,37 @@ def _leader_move(session: GymSession, leader, player):
     return random.choice(usable)
 
 
+# Battle HP (user 2026-10-15): gym-style fights (gyms, rematches, the Elite Four,
+# expeditions, legendaries, totems, Titans) run at x2 HP for both sides, so a
+# single move rarely knocks anything out within 5 levels - one-shots drop from
+# ~13% of matchups to ~1-2% (balance_sim/hp_inflation.py). Saved HP is untouched:
+# the engines scale it up and read it back down. Wild battles are unchanged.
+HP_MULT = 2.0
+
+# Hidden boss guard (user 2026-10-15): wild legendaries, totems and Titans take
+# 25% less damage. Never shown; battle-only, so a caught Pokemon doesn't keep it.
+BOSS_GUARD = 0.75
+
+
+def guard_for(gym):
+    """The boss's damage multiplier for this fight, or None."""
+    if getattr(gym, "guard", None):
+        return float(gym.guard)
+    if getattr(gym, "is_rematch", False):
+        return None
+    if getattr(gym, "is_legend", False) or getattr(gym, "totem", None) or getattr(gym, "titan", None):
+        return BOSS_GUARD
+    return None
+
+
 def _engine(session: GymSession):
     """The fight's single engine State, built on the first turn."""
     if session.engine is None:
         session.engine = GE.EngineBattle(session.player_team, session.leader_team,
                                          leader_label=session.gym.leader,
                                          totem=getattr(session.gym, "totem", None),
-                                         titan=getattr(session.gym, "titan", None))
+                                         titan=getattr(session.gym, "titan", None),
+                                         guard=guard_for(session.gym), hp_mult=HP_MULT)
     return session.engine
 
 
@@ -387,7 +445,8 @@ def _classic_from_current(session: GymSession, sd):
     return GE.EngineBattle(order(session.player_team, p_act), order(session.leader_team, l_act),
                            leader_label=session.gym.leader,
                           totem=getattr(session.gym, "totem", None),
-                                         titan=getattr(session.gym, "titan", None))
+                                         titan=getattr(session.gym, "titan", None),
+                                         guard=guard_for(session.gym), hp_mult=HP_MULT)
 
 
 # --------------------------------------------------------------- rewards ---
@@ -602,6 +661,22 @@ def finish_session(session: GymSession, progress: GymProgress, review_count: int
         except Exception:
             rc = RETRY_COST_REVIEWS
         notes = ["Your team is healed. Review %d more cards here to try again." % rc]
+        # Classic Elite Four: beat them all in one go - a loss ends the run, and
+        # the members you beat on the way have to be beaten again
+        try:
+            from .gym_config import elite_four_classic
+            if session.gym.is_elite and elite_four_classic():
+                from .gym_data import ladder
+                run = [g for g in ladder(getattr(session.gym, "region", None)) if g.is_elite]
+                done = progress.defeated_ids()
+                beaten = [g.gym_id for g in run if g.gym_id in done]
+                if run and beaten:
+                    progress.reset_wins(beaten)
+                    progress.record_attempt(run[0].gym_id, review_count)     # the retry wait starts there
+                    notes.append("Classic Elite Four: the run is over. Next time you start again from %s."
+                                 % run[0].leader)
+        except Exception as e:
+            _log("warning", "Elite Four reset failed: %s" % e)
     _log("info", session.summary())
     return notes
 

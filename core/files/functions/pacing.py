@@ -21,8 +21,10 @@ How the numbers were set (2026-10-02):
 
 CONTENT_DAYS = 120          # about four months
 LOSS_OVERHEAD = 1.15        # expected rematch waits on top of the gym intervals
-RETRY_SHARE = 0.6           # rematch wait, in days of cards
-DECLINE_SHARE = 0.4         # "Not now" wait, in days of cards
+RETRY_SHARE = 0.6           # retry wait after a loss, as a share of the gym interval
+DECLINE_SHARE = 0.4         # "Not now" wait, as a share of the gym interval
+GYM_SHARE = 0.5             # gym interval = half the daily goal: about two gyms a day
+XP_ANCHOR_CARDS = 400       # EXP x1.0 at this many cards per gym, 1 card per round
 CARDS_TO_LV62 = 20800       # x cards-per-round / multiplier (see above)
 LEVEL_BY = 0.8              # reach that by 80% of the content period
 FALLBACK_GYMS = 44          # if the gym package isn't installed
@@ -62,12 +64,15 @@ def recommended(goal, cpr=2) -> dict:
     except (TypeError, ValueError):
         g = 100
     c = cards_per_round(cpr)
-    days_per_gym = CONTENT_DAYS / (gym_count() * LOSS_OVERHEAD)
-    xp = CARDS_TO_LV62 * c / (LEVEL_BY * CONTENT_DAYS * g)
+    # 2026-10-15 (user, 600-900 cards a day, interval 300-500 at EXP x1.0): a
+    # gym every half day's cards, the waits as shares of that interval, and EXP
+    # scaled by cards per gym and per round so levels keep pace with the gyms.
+    interval = _round(GYM_SHARE * g)
+    xp = XP_ANCHOR_CARDS * c / max(1, interval)
     return {
-        "gym.reviews_per_gym": _round(days_per_gym * g),
-        "gym.retry_cost_reviews": _round(RETRY_SHARE * g),
-        "gym.decline_cooldown_reviews": _round(DECLINE_SHARE * g),
+        "gym.reviews_per_gym": interval,
+        "gym.retry_cost_reviews": _round(RETRY_SHARE * interval),
+        "gym.decline_cooldown_reviews": _round(DECLINE_SHARE * interval),
         "battle.defeat_xp_multiplier": round(max(0.1, min(10.0, xp)), 2),
     }
 

@@ -31,10 +31,12 @@ readline.createInterface({input: process.stdin}).on('line', line => {
       G.dmaxStart(cmd.dynamax || null);          // before newBattle: the first request offers it
       G.teraStart(cmd.tera || null);
       b = newBattle(cmd.p1, cmd.p2);
+      G.hpScale(b, cmd.hpmult || 1);             // battle HP (Ankimon divides it back)
       G.dmaxReady(b);
       G.teraReady(b);
       G.totemStart(b, cmd.totem || null);
       G.titanStart(b, cmd.titan || null);
+      G.guardStart(b, cmd.guard || null);
       const v = view(b, 0); sent = b.log.length; return reply(v);
     }
     if (!b) return reply({ok: false, error: 'no battle'});

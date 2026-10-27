@@ -28,7 +28,7 @@ from aqt.qt import (
 
 from ..singletons import logger
 from .gym_state import GymSession, GymProgress, TEAM_SIZE
-from .gym_data import next_gym, ladder_complete, current_region, level_cap, gate_reviews
+from .gym_data import next_gym, ladder_complete, current_region, level_cap, gate_reviews, ELITE4
 from . import gym_battle as GB
 from . import gym_config as CFG
 
@@ -209,6 +209,61 @@ def _held_label(rec) -> str:
     return "   - holding %s" % label
 
 
+def recommended_types(gym, limit=3) -> List[str]:
+    """Attack types that hit the boss's team super-effectively, best first: ones
+    that hit its ace (highest level) lead, then how much of the team they hit,
+    then how well that type stands up to the team's own types."""
+    try:
+        from ..functions.pokedex_functions import search_pokedex
+        from .move_card import _chart, multiplier
+        chart = _chart()
+        team = []
+        for m in gym.team:
+            types = search_pokedex(str(m.species).lower(), "types") or []
+            if isinstance(types, str):
+                types = [types]
+            team.append((int(m.level), [str(t).capitalize() for t in types if t]))
+        if not chart or not team:
+            return []
+        ace = max(range(len(team)), key=lambda i: (team[i][0], i))
+        theirs = {t for _, ts in team for t in ts}
+        ranked = []
+        for atk in sorted(chart):
+            hits = [multiplier("", atk, ts, chart) for _, ts in team]
+            if max(hits) <= 1:
+                continue
+            taken = sum(multiplier("", t, [atk], chart) for t in theirs)
+            ranked.append(((hits[ace] > 1, sum(h > 1 for h in hits), sum(hits), -taken), atk))
+        ranked.sort(key=lambda r: r[0], reverse=True)
+        return [atk for _, atk in ranked[:limit]]
+    except Exception:
+        return []
+
+
+def brief_lines(gym) -> List[str]:
+    """Who, their team, the types to bring - the challenge dialog's header and
+    the HUD counter's hover card, so you can plan while reviewing."""
+    lines = ["<b>%s</b> — %s specialist" % (gym.leader, gym.type_theme),
+             "<b>Their team:</b> " + ", ".join(
+                 "%s Lv%d" % (m.species, m.level) for m in gym.team)]
+    rec = recommended_types(gym)
+    if rec:
+        lines.append("<b>Recommended:</b> " + ", ".join(rec))
+    return lines
+
+
+def progress_tip() -> str:
+    """brief_lines for whoever the HUD counter is counting toward, as one
+    HTML block ("" when the counter isn't about a gym)."""
+    try:
+        if not CFG.enabled() or gym_is_active():
+            return ""
+        gym = next_gym(progress().defeated_ids())
+        return "<br>".join(brief_lines(gym)) if gym is not None else ""
+    except Exception:
+        return ""
+
+
 class TeamSelectDialog(QDialog):
     """Pick exactly 3 from the player's 6-slot party."""
 
@@ -218,34 +273,17 @@ class TeamSelectDialog(QDialog):
         self.selected: List[dict] = []
         lay = QVBoxLayout(self)
 
-        lay.addWidget(QLabel("<b>%s</b> — %s specialist" % (gym.leader, gym.type_theme)))
-        blurb = QLabel(gym.blurb)
-        blurb.setWordWrap(True)
-        lay.addWidget(blurb)
-        lay.addWidget(QLabel(
-            "<b>Their team:</b> " + ", ".join(
-                "%s Lv%d" % (m.species, m.level) for m in gym.team)))
+        for line in brief_lines(gym):
+            lab = QLabel(line)
+            lab.setWordWrap(True)
+            lay.addWidget(lab)
         # The level YOUR team should be at (what the difficulty is tuned for);
-        # the boss's own team level can differ by a few levels.
+        # the boss's own team level can differ by a few levels. Only the
+        # "Selected" line's average uses these now.
         self.rec_level = (getattr(gym, "recommended_level", 0)
                           or max(m.level for m in gym.team))
-        rec = QLabel("<b>Recommended:</b> Lv %d with a type advantage. Each ~5 "
-                     "levels under costs roughly a fifth of your chances; "
-                     "over-levelled is easier." % self.rec_level)
-        rec.setWordWrap(True)
-        lay.addWidget(rec)
-        self.cap = current_cap()
-        if self.cap:
-            capl = QLabel("<b>Level cap in %s:</b> Lv %d. Anything above fights at Lv %d "
-                          "(it keeps its real level)." % (current_region(), self.cap, self.cap))
-            capl.setWordWrap(True)
-            lay.addWidget(capl)
-
-        note = QLabel("Your three start at full HP. Once the fight begins they "
-                      "do <b>not</b> heal between knockouts — beat all three of "
-                      "theirs before all three of yours fall.")
-        note.setWordWrap(True)
-        lay.addWidget(note)
+        # boss fights: anything above the opponent's level fights at it (never raised)
+        self.cap = GB.boss_level(gym) or current_cap()
 
         lay.addWidget(QLabel("Choose <b>%d</b> Pokemon:" % TEAM_SIZE))
         from ..functions import poke_search as PS
@@ -474,7 +512,7 @@ def start_gym(gym, reuse_selection: bool = False) -> bool:
         import copy as _copy
         gym = _copy.copy(gym)
         gym.tera_rolled = _tr.roll_ace_type(gym.tera)
-    player = GB.build_player_team(selection)
+    player = GB.build_player_team(selection, GB.boss_level(gym))     # fight at the boss's level
     if getattr(gym, "test_mech", "") in ("tera", "titan"):
         # Game > Test Tera: anyone holding nothing gets a Tera Shard of a random
         # type for this battle only
@@ -510,7 +548,7 @@ def start_gym(gym, reuse_selection: bool = False) -> bool:
             from . import dmax as _dm, tera as _tr
             sd.start(player, leader, gym.leader, totem=getattr(gym, "totem", None),
                      dynamax=_dm.config_for(gym), tera=_tr.config_for(gym),
-                     titan=getattr(gym, "titan", None))
+                     titan=getattr(gym, "titan", None), guard=GB.guard_for(gym), hp_mult=GB.HP_MULT)
             _session.engine = sd            # real-game rules for this fight
         except Exception as e:
             _log("warning", "Showdown engine could not start this fight, using classic: %s" % e)
@@ -555,25 +593,35 @@ def progress_text() -> str:
         # one actually binding, so that is what the counter should show —
         # otherwise the line sits pinned at "N / N" while nothing happens.
         gates = []
+        # The Elite Four (Galar: the Champion Cup) go by their title, not
+        # whichever member is next; "retry", not "rematch" (that's the Gym
+        # Rematches feature for leaders you've beaten).
+        if gym.kind == ELITE4:
+            who = "the Champion Cup" if current_region() == "Galar" else "the Elite Four"
+            full = who
+        else:
+            who, full = gym.leader, "%s (%s)" % (gym.name, gym.leader)
         if attempts > 0:
             gates.append((row[3] + max(1, CFG.retry_cost()),
                           max(1, CFG.retry_cost()),
-                          "until rematch vs %s" % gym.leader))
+                          "until you can retry %s" % who))
         else:
             gates.append((progress().unlock_point(gym, CFG.reviews_per_gym()),
                           max(1, gate_reviews(gym, CFG.reviews_per_gym())),
-                          "until %s (%s)" % (gym.name, gym.leader)))
+                          "until %s" % full))
 
         dt = _decline_target()
         if dt >= 0:
             gates.append((dt, max(1, CFG.decline_cooldown()),
-                          "until %s is offered again" % gym.leader))
+                          "until %s is offered again" % who))
 
         target, denom, label = max(gates, key=lambda g: g[0])
         if reviews >= target:
             # every gate met: a full "300 / 300" read as stuck
-            return "%s is ready %s - next card" % (
-                gym.leader, "for a rematch" if attempts > 0 else "to battle")
+            name = who[:1].upper() + who[1:]
+            return "%s %s ready %s - next card" % (
+                name, "are" if gym.kind == ELITE4 else "is",
+                "for another try" if attempts > 0 else "to battle")
         have = denom - max(0, target - reviews)
         return "%d / %d %s" % (max(0, min(denom, have)), denom, label)
     except Exception:
@@ -638,6 +686,11 @@ def handle_review(review_count: int = 0):
         try:
             from . import paldea as _pd
             _pd.stake_tick()            # Paldea: a ruinous stake, now and then
+        except Exception:
+            pass
+        try:
+            from . import mew as _mew
+            _mew.on_review()            # Mew: a week of daily goals + Kanto's first 3 gyms
         except Exception:
             pass
         if gym_is_active():
@@ -748,3 +801,19 @@ def _dn(n):
     except Exception:
         s = str(n or "")
         return s[:1].upper() + s[1:]
+
+
+# Phone reviews (user 2026-10-26): cards done in AnkiMobile / AnkiDroid reach the
+# review log with a sync. The lifetime count is cached per session, so count the
+# log again after every sync - they then count toward the next gym, rematches and
+# the region clock (battles, XP and training points stay desktop-only).
+def _on_sync_finished(*_args):
+    global _life_cache
+    _life_cache = None
+
+
+try:
+    from aqt import gui_hooks as _gh
+    _gh.sync_did_finish.append(_on_sync_finished)
+except Exception as _e:
+    _log("warning", "sync hook not added: %s" % _e)

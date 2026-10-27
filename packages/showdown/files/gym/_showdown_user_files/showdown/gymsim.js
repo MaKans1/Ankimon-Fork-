@@ -135,6 +135,7 @@ function planChoice(b, rollouts = 3, horizon = 8) {
       const c = Battle.fromJSON(snap);
       if (ctx.totem) totemLock(c);
       if (ctx.titan) titanLock(c);
+      if (ctx.guard) guardLock(c);
       c.log = c.log.slice();           // fromJSON shares the log array with the original
       c.resetRNG(PRNG.generateSeed());
       c.sentLogPos = c.log.length;
@@ -658,6 +659,36 @@ function titanBoost(b, t, boosts, msg) {
     if (t.boosts[k] !== before) b.add('-boost', t, k, t.boosts[k] - before);
   }
 }
+// Battle HP (user 2026-10-15): gym-style fights run at x2 HP for everyone, so
+// one move rarely knocks anything out (one-shots in ~13% of +/-5-level
+// matchups -> ~1-2%: balance_sim/hp_inflation.py). baseMaxhp too, or
+// Dynamax ending would drop it back. Ankimon reads HP back divided by it.
+function hpScale(b, mult) {
+  ctx.hpmult = mult && mult > 0 ? mult : 1;
+  if (ctx.hpmult === 1) return;
+  for (const side of b.sides) for (const p of side.pokemon) {
+    p.baseMaxhp = Math.round(p.baseMaxhp * ctx.hpmult);
+    p.maxhp = Math.round(p.maxhp * ctx.hpmult);
+    p.hp = p.hp > 0 ? Math.max(1, Math.round(p.hp * ctx.hpmult)) : 0;
+  }
+}
+// Hidden boss guard (user 2026-10-15): wild legendaries (expeditions, roaming
+// and one-time encounters), totems and Titans take 25% less damage from moves.
+// Never shown; it's battle-only, so a caught Pokemon doesn't keep it.
+function guardStart(b, cfg) {
+  ctx.guard = cfg ? {mult: cfg.mult || 0.75} : null;
+  if (ctx.guard) guardLock(b);
+}
+function guardLock(b) {
+  b.onEvent('Damage', b.format, (damage, target, source, effect) => {
+    const g = ctx.guard;
+    if (!g || !target || typeof damage !== 'number' || damage <= 0) return damage;
+    const bb = target.battle;
+    if (target.side !== bb.p2 || target.ankimonIndex !== 0) return damage;
+    if (!effect || effect.effectType !== 'Move') return damage;     // moves only
+    return Math.max(1, Math.floor(damage * g.mult));
+  });
+}
 function titanLock(b) {
   b.onEvent('Damage', b.format, (damage, target) => {
     const T = ctx.titan;
@@ -702,6 +733,7 @@ function planChoiceP1(b, rollouts = 3, horizon = 8) {
       const c = Battle.fromJSON(snap);
       if (ctx.totem) totemLock(c);
       if (ctx.titan) titanLock(c);
+      if (ctx.guard) guardLock(c);
       c.log = c.log.slice(); c.resetRNG(PRNG.generateSeed()); c.sentLogPos = c.log.length;
       try {
         mc(c, 'move ' + o.i, strongest(c.p2, c.p1));
@@ -719,6 +751,6 @@ function planChoiceP1(b, rollouts = 3, horizon = 8) {
 module.exports = {ctx, cleanSet, newBattle, carryOver, mc, active, usableMoves, nextSwitch, settleSwitches,
   estDamage, strongest, randomChoice, score, planChoice, planChoiceP1, fmt, readable, view,
   totemStart, totemChoice, totemCheck, totemSettle, zOptions, zView, autoZ,
-  titanStart, titanSettle,
+  titanStart, titanSettle, guardStart, guardLock, hpScale,
   dmaxStart, dmaxReady, dmaxView, dmaxLeader, autoDmax, canDmax,
   teraStart, teraReady, teraBlastAt, teraBlastSwap, teraView, teraLeader, autoTera, canTera};

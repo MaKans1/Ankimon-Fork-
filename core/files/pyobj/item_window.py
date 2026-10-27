@@ -684,14 +684,14 @@ class ItemWindow(QWidget):
     def _item_evo_target(self, species_id, item_id):
         """Quiet version of check_evolution_by_item (no warning pop-ups)."""
         try:
-            from ..functions.pokedex_functions import pokemon_evolves_from_id, get_pokemon_evolution_data
+            from ..functions.pokedex_functions import pokemon_evolves_from_id, get_pokemon_item_evolution_rows
             for evo in pokemon_evolves_from_id(species_id) or []:
-                d = get_pokemon_evolution_data(int(evo)) or {}
-                trig = str(d.get("evolution_trigger_id") or "")
-                if trig == "3" and str(d.get("trigger_item_id") or "") == str(item_id):
-                    return int(d["evolved_species_id"])
-                if trig == "2" and str(d.get("held_item_id") or "") == str(item_id):
-                    return int(d["evolved_species_id"])
+                for d in get_pokemon_item_evolution_rows(int(evo)):
+                    trig = str(d.get("evolution_trigger_id") or "")
+                    if trig == "3" and str(d.get("trigger_item_id") or "") == str(item_id):
+                        return int(d["evolved_species_id"])
+                    if trig == "2" and str(d.get("held_item_id") or "") == str(item_id):
+                        return int(d["evolved_species_id"])
         except Exception:
             pass
         return None
@@ -955,10 +955,18 @@ class ItemWindow(QWidget):
                     # (e.g. Metal Coat -> Steelix/Scizor, Deep Sea Tooth/Scale ->
                     # Huntail/Gorebyss, Dragon Scale -> Kingdra, King's Rock ->
                     # Politoed/Slowking).
-                    elif row.get('evolution_trigger_id') == '2':
+                    # Level-up-while-holding evolutions (trigger 1 + held item:
+                    # Oval Stone, Razor Claw, Razor Fang) are used like stones too.
+                    elif row.get('evolution_trigger_id') in ('1', '2'):
                         item_id = row.get('held_item_id')
                         if item_id:
                             evolution_item_ids.add(item_id)
+            # item evolutions the table doesn't have (Syrupy Apple, Teacups, Sweets...)
+            try:
+                from ..functions.pokedex_functions import _EXTRA_ITEM_EVOS
+                evolution_item_ids.update(r["trigger_item_id"] for r in _EXTRA_ITEM_EVOS)
+            except Exception:
+                pass
 
             with open(csv_file_items_cost, mode='r', newline='', encoding='utf-8') as items_file:
                 reader = csv.DictReader(items_file)

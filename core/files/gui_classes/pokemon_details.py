@@ -229,6 +229,26 @@ def PokemonCollectionDetails(
             "xp": stats_list[6],
             "friendship": friendship,
         }
+        # Ankimon 2.5: training points - the "+" next to a stat raises its IV
+        _training = None
+        try:
+            from ..functions import training as _trn
+            _trec = mw.ankimon_db.get_pokemon(individual_id) or {}
+
+            def _train(stat):
+                msg = _trn.train(individual_id, stat)
+                if msg:
+                    logger.log_and_showinfo("info", msg)
+                try:
+                    from ..singletons import pokemon_pc
+                    if pokemon_pc.isVisible():
+                        pokemon_pc.show_pokemon_details({"individual_id": individual_id})
+                except Exception:
+                    pass
+            _training = {"points": _trn.available(_trec), "iv": dict(_trec.get("iv") or iv or {}),
+                         "per": _trn.step(), "max": _trn.IV_MAX, "train": _train}
+        except Exception:
+            _training = None
         CompleteTable_layout = PokemonDetailsStats(
             _stats_dict,
             growth_rate,
@@ -236,6 +256,7 @@ def PokemonCollectionDetails(
             remove_levelcap,
             language,
             friendship_bar_max=readiness["bar_max"],
+            training=_training,
         )
 
         if gender == "M":
@@ -262,12 +283,25 @@ def PokemonCollectionDetails(
         cp_label = QLabel(cp_txt)
         cp_label.setToolTip(cp_tooltip)
         ability_label = QLabel(ability_txt)
+        try:                                   # Ankimon 2.5: hover for what the ability does
+            from ..functions.details_info import ability_desc
+            _ad = ability_desc(ability)
+            if _ad:
+                ability_label.setToolTip(_ad)
+                ability_label.setCursor(Qt.CursorShape.WhatsThisCursor)
+        except Exception:
+            pass
         attacks_label = QLabel(attacks_txt)
         pokemon_defeated_label = QLabel(f"Pokémon Defeated: {pokemon_defeated}")
         if captured_date is not None:
             captured_date_label = QLabel(f"Captured: {captured_date.split()[0]}")
         else:
             captured_date_label = QLabel(f"Captured: N/A")
+        # The pixel fonts draw a capital E-acute like a small e ("POKeMON"):
+        # these all-caps labels get a plain E.
+        for _lbl in (name_label, description_label, level_label, cp_label, ability_label,
+                     attacks_label, pokemon_defeated_label, captured_date_label):
+            _lbl.setText(_lbl.text().replace("\u00e9", "e").replace("\u00c9", "E"))
         # Friendship-evolution UI: an actionable "Evolve now" button when the
         # Pokémon is ready, otherwise the requirement line (e.g. "40 friendship
         # to evolve into Espeon · needs Day"). Only shown when relevant.
@@ -324,6 +358,23 @@ def PokemonCollectionDetails(
             evolution_req_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             evolution_req_label.setStyleSheet("color: #FF69B4;")
             evolution_req_widget = evolution_req_label
+        else:
+            # Ankimon 2.5: always say what it takes to evolve (a level, a stone,
+            # the no-trade rule...) where "Evolve now" would appear
+            try:
+                from ..functions.details_info import evolution_hint
+                _hint = evolution_hint(id, level, everstone)
+            except Exception:
+                _hint = ""
+            if _hint:
+                evolution_req_label = QLabel(_hint.replace("\u00e9", "e").replace("\u00c9", "E"))
+                evolution_req_label.setFont(custom_font)
+                evolution_req_label.setWordWrap(True)
+                evolution_req_label.setFixedWidth(230)
+                evolution_req_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                evolution_req_label.setStyleSheet(
+                    "color: gray;" if _hint == "Fully evolved" else "color: #FF69B4;")
+                evolution_req_widget = evolution_req_label
 
         level_label.setFont(custom_font)
         cp_label.setFont(custom_font)
@@ -385,26 +436,47 @@ def PokemonCollectionDetails(
         if evolution_note_widget is not None:
             TopL_layout_Box.addWidget(evolution_note_widget)
 
+        # Ankimon 2.5: the move buttons use the moves as they are NOW, and the
+        # panel redraws after a change (it kept showing the moves it opened with)
+        def _live_attacks():
+            try:
+                return list((mw.ankimon_db.get_pokemon(individual_id) or {}).get("attacks") or attacks)
+            except Exception:
+                return list(attacks)
+
+        def _redraw_details():
+            try:
+                from ..singletons import pokemon_pc
+                if pokemon_pc.isVisible():
+                    pokemon_pc.show_pokemon_details({"individual_id": individual_id})
+            except Exception:
+                pass
+
+        def _then_redraw(fn):
+            def run():
+                fn()
+                _redraw_details()
+            return run
+
         attacks_details_button = QPushButton("Attack Details")
-        qconnect(attacks_details_button.clicked, lambda: attack_details_window(attacks))
+        qconnect(attacks_details_button.clicked, lambda: attack_details_window(_live_attacks()))
         remember_attacks_details_button = QPushButton("Remember Attacks")
         all_attacks = get_all_pokemon_moves(name, level)
         qconnect(
             remember_attacks_details_button.clicked,
-            lambda: remember_attack_details_window(
-                individual_id, attacks, all_attacks, logger
-            ),
+            _then_redraw(lambda: remember_attack_details_window(
+                individual_id, _live_attacks(), all_attacks, logger)),
         )
         forget_attacks_details_button = QPushButton("Forget Attacks")
         qconnect(
             forget_attacks_details_button.clicked,
-            lambda: forget_attack_details_window(individual_id, attacks, logger),
+            _then_redraw(lambda: forget_attack_details_window(individual_id, _live_attacks(), logger)),
         )
 
         tm_attacks_details_button = QPushButton("Learn attacks from TMs")
         qconnect(
             tm_attacks_details_button.clicked,
-            lambda: tm_attack_details_window(id, individual_id, attacks, logger),
+            _then_redraw(lambda: tm_attack_details_window(id, individual_id, _live_attacks(), logger)),
         )
 
         TopR_layout_Box.addWidget(attacks_label)
@@ -509,7 +581,8 @@ def PokemonCollectionDetails(
 
 
 def PokemonDetailsStats(
-    detail_stats, growth_rate, level, remove_levelcap, language, friendship_bar_max=400
+    detail_stats, growth_rate, level, remove_levelcap, language, friendship_bar_max=400,
+    training=None,
 ):
     CompleteTable_layout = QVBoxLayout()
     CompleteTable_layout.addSpacing(15)
@@ -553,7 +626,7 @@ def PokemonDetailsStats(
         display_name = display_names.get(stat, stat.capitalize())
         stat_item2 = QLabel(display_name)
         max_width_stat_item = 200  # Used for BAR math, not label width anymore
-        stat_item2.setFixedWidth(100)  # Match IV/EV width
+        stat_item2.setFixedWidth(130)  # fits "Friendship" (it was cropped at 100)
         stat_item2.setAlignment(
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         )
@@ -607,10 +680,67 @@ def PokemonDetailsStats(
         layout_row.addWidget(value_item2)  # Value is now fixed width
 
         layout_row.addWidget(bar_item2)
+        if training is not None:
+            # Ankimon 2.5: "+" spends a training point on this stat's IV (other
+            # rows get a blank of the same width so everything stays aligned)
+            bar_item2.setPixmap(pixmap2.scaledToWidth(160))
+            if stat in ("hp", "atk", "def", "spa", "spd", "spe"):
+                _iv = int((training.get("iv") or {}).get(stat, 0) or 0)
+                _max = int(training.get("max") or 31)
+                if _iv >= _max:
+                    # already the best it can be: say so (a "+" that can't be pressed looked broken)
+                    plus = QLabel("MAX")
+                    plus.setFixedSize(30, 16)
+                    plus.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    plus.setStyleSheet("color: #8ab4f8; font-size: 9px; font-weight: bold;")
+                    plus.setToolTip("The %s IV is already %d - it can't go higher." % (display_name, _max))
+                else:
+                    plus = QPushButton("+")
+                    plus.setFixedSize(30, 16)          # fits the stat rows
+                    plus.setStyleSheet("QPushButton { padding: 0px; font-size: 12px; font-weight: bold; }"
+                                       "QPushButton:disabled { color: #6b7280; border-color: #4b5563; }")
+                    plus.setEnabled(int(training.get("points") or 0) > 0)
+                    plus.setToolTip("Spend a training point: +1 to the %s IV (now %d / %d)."
+                                    % (display_name, _iv, _max))
+                    qconnect(plus.clicked, lambda _c=False, s=stat: training["train"](s))
+                layout_row.addWidget(plus, 0, Qt.AlignmentFlag.AlignVCenter)
+            else:
+                _blank = QLabel("")
+                _blank.setFixedSize(30, 16)
+                layout_row.addWidget(_blank, 0, Qt.AlignmentFlag.AlignVCenter)
         layout_row.addStretch()  # Ensure alignment logic is identical
         stat_item2.setAlignment(Qt.AlignmentFlag.AlignCenter)
         bar_item2.setAlignment(Qt.AlignmentFlag.AlignCenter)
         CompleteTable_layout.addLayout(layout_row)
+
+    _perfect = training is not None and all(
+        int((training.get("iv") or {}).get(k, 0) or 0) >= int(training.get("max") or 31)
+        for k in ("hp", "atk", "def", "spa", "spd", "spe"))
+    if _perfect:
+        # every IV at 31: a gold, glowing PERFECT in the game's pixel font
+        tp = QLabel("PERFECT")
+        tp.setFont(load_custom_font(28, language))
+        tp.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        tp.setStyleSheet("color: #FFD54A;")
+        try:
+            from aqt.qt import QGraphicsDropShadowEffect
+            _glow = QGraphicsDropShadowEffect()
+            _glow.setBlurRadius(16)
+            _glow.setOffset(0, 0)
+            _glow.setColor(QColor(255, 176, 0, 220))
+            tp.setGraphicsEffect(_glow)
+        except Exception:
+            pass
+        tp.setToolTip("Every IV is 31 - as good as it gets.")
+        CompleteTable_layout.addWidget(tp)
+    elif training is not None:
+        tp = QLabel("Training points: %d" % int(training.get("points") or 0))
+        tp.setFont(custom_font)
+        tp.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        tp.setToolTip("Your buddy earns one point for every %d cards you review (2 for a day's card "
+                      "goal). Use + next to a stat to raise its IV by 1 (up to %d)."
+                      % (int(training.get("per") or 50), int(training.get("max") or 31)))
+        CompleteTable_layout.addWidget(tp)
 
     return CompleteTable_layout
 
@@ -903,14 +1033,22 @@ def attack_details_window(attacks):
     window.exec()
 
 
-def remember_attack_details_window(individual_id, attack_set, all_attacks, logger):
+def remember_attack_details_window(individual_id, attack_set, all_attacks, logger, on_remember=None):
+    """on_remember(move): what a "Remember" button does instead of remember_attack
+    (the Scaled Moves block passes remember_scaled_attack - same window, other list)."""
     window = QDialog()
     window.setWindowIcon(QIcon(str(icon_path)))
     outer_layout = QVBoxLayout(window)
     scroll_area = QScrollArea()
     scroll_area.setWidgetResizable(True)
     content_widget = QWidget()
-    layout = QHBoxLayout(content_widget)
+    # the table and its buttons keep their own height together; extra window space
+    # goes below, so a short list's buttons stay level with their rows on resize
+    _rows_col = QVBoxLayout(content_widget)
+    _rows = QWidget()
+    layout = QHBoxLayout(_rows)
+    _rows_col.addWidget(_rows)
+    _rows_col.addStretch(1)
     html_content = remember_attack_details_window_template
     for attack in all_attacks:
         move = find_details_move(attack) or _lookup_move_data(attack)
@@ -934,9 +1072,8 @@ def remember_attack_details_window(individual_id, attack_set, all_attacks, logge
         remember_attack_button = QPushButton(f"Remember {attack}")
         qconnect(
             remember_attack_button.clicked,
-            lambda checked, a=attack: remember_attack(
-                individual_id, attack_set, a, logger
-            ),
+            (lambda checked, a=attack: on_remember(a)) if on_remember else
+            (lambda checked, a=attack: remember_attack(individual_id, attack_set, a, logger)),
         )
         attack_layout.addWidget(remember_attack_button)
     attack_layout_widget = QWidget()
@@ -1065,6 +1202,41 @@ def remember_attack(
             update_main_pokemon(_live_main)
         except Exception:
             pass
+
+
+def remember_scaled_attack(individual_id: str, region: str, new_attack: str, logger: ShowInfoLogger):
+    """remember_attack for a Pokemon's scaled moves in `region` (wild_menus Scaled
+    Moves, functions/move_seal.py): same messages and replace dialog; its
+    full-level moveset isn't touched."""
+    db = mw.ankimon_db
+    pokemon_data = db.get_pokemon(individual_id)
+    if not pokemon_data:
+        logger.log_and_showinfo("warning", "Pokémon not found!")
+        return
+    scaled = dict(pokemon_data.get("scaled_moves") or {})
+    attacks = list(scaled.get(region) or [])
+    if new_attack in attacks:
+        logger.log_and_showinfo("warning", "Your Pokémon already knows this move!")
+        return
+    msg = f"Your {_pname(pokemon_data['name'])} can learn a new attack !"
+    if len(attacks) < 4:
+        attacks.append(new_attack)
+        msg += f"\n Your {_pname(pokemon_data['name'])} has learned {new_attack} !"
+        logger.log_and_showinfo("info", f"{msg}")
+    else:
+        dialog = AttackDialog(attacks, new_attack)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            selected_attack = dialog.selected_attack
+            try:
+                attacks[attacks.index(selected_attack)] = new_attack
+                logger.log_and_showinfo("info", f"Replaced '{selected_attack}' with '{new_attack}'")
+            except ValueError:
+                logger.log_and_showinfo("info", f"{new_attack} will be discarded.")
+        else:
+            logger.log_and_showinfo("info", f"{new_attack} will be discarded.")
+    scaled[region] = attacks
+    pokemon_data["scaled_moves"] = scaled
+    db.save_pokemon(pokemon_data)
 
 
 def forget_attack(

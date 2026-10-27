@@ -18,6 +18,7 @@ from ..resources import user_path
 DEFAULT_CONFIG = {
     "battle.replace_duplicate_catches": True,
     "battle.duplicate_level_window": 5,
+    "battle.keep_duplicates": 1,              # Keep Duplicates: copies of each species kept
     "battle.upgrade_priority": "iv",          # Upgrade Behavior: "iv" or "level"
     "battle.wild_levels_follow_badges": True,
     "battle.show_battle_popups": False,

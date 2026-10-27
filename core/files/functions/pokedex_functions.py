@@ -662,24 +662,22 @@ def check_evolution_by_item(pokemon_id, item_id, file_path=poke_evo_path):
     # Iterate through the possible evolutions
     for evos in possible_evos:
         try:
-            evo_data = get_pokemon_evolution_data(int(evos))
+            evo_rows = get_pokemon_item_evolution_rows(int(evos))
         except (TypeError, ValueError):
             continue
-        if not evo_data:
-            continue
+        for evo_data in evo_rows:       # every item row (Magneton's Thunder Stone isn't the first)
+            try:
+                trigger_id = int(evo_data.get("evolution_trigger_id", 0) or 0)
+            except (TypeError, ValueError):
+                continue
 
-        try:
-            trigger_id = int(evo_data.get("evolution_trigger_id", 0) or 0)
-        except (TypeError, ValueError):
-            continue
-
-        # Use-item evolutions match on trigger_item_id; trade-with-held-item
-        # evolutions match on held_item_id. Compare as strings so blank fields
-        # ("") simply don't match instead of raising on int("").
-        if trigger_id == 3 and str(evo_data.get("trigger_item_id", "")) == target_item:
-            return int(evo_data["evolved_species_id"])
-        if trigger_id == 2 and str(evo_data.get("held_item_id", "")) == target_item:
-            return int(evo_data["evolved_species_id"])
+            # Use-item evolutions match on trigger_item_id; trade-with-held-item
+            # evolutions match on held_item_id. Compare as strings so blank fields
+            # ("") simply don't match instead of raising on int("").
+            if trigger_id == 3 and str(evo_data.get("trigger_item_id", "")) == target_item:
+                return int(evo_data["evolved_species_id"])
+            if trigger_id == 2 and str(evo_data.get("held_item_id", "")) == target_item:
+                return int(evo_data["evolved_species_id"])
 
     # If no evolution matches the criteria, return None
     return None
@@ -904,6 +902,48 @@ def get_pokemon_evolution_data(pokemon_id):
             message=f"Error retrieving evolution data for Pokémon ID {pokemon_id}",
         )
     return evolution_data
+
+
+# Item evolutions that sit behind an older method in pokemon_evolution.csv (it
+# lists the Gen 4-7 "level up at a special place" rows first, and
+# get_pokemon_evolution_data returns only the first row), so these items did
+# nothing. Regional-form rows (Alolan Sandslash/Ninetales, Galarian
+# Slowbro/Slowking/Darmanitan) stay out on purpose: a normal-form Pokemon
+# evolves into the normal form.
+_LATER_ITEM_EVOS = {350, 462, 470, 471, 738}     # Milotic, Magnezone, Leafeon, Glaceon, Vikavolt
+# Gen 9 item methods the table doesn't have at all
+_EXTRA_ITEM_EVOS = [
+    {"evolved_species_id": "740", "evolution_trigger_id": "3", "trigger_item_id": "885"},  # Crabominable: Ice Stone
+    {"evolved_species_id": "1011", "evolution_trigger_id": "3", "trigger_item_id": "2109"},  # Dipplin: Syrupy Apple
+    {"evolved_species_id": "1013", "evolution_trigger_id": "3", "trigger_item_id": "2110"},  # Sinistcha: Unremarkable Teacup
+    {"evolved_species_id": "1013", "evolution_trigger_id": "3", "trigger_item_id": "2111"},  # Sinistcha: Masterpiece Teacup
+    {"evolved_species_id": "855", "evolution_trigger_id": "3", "trigger_item_id": "1312"},   # Polteageist: Chipped Pot
+    {"evolved_species_id": "1018", "evolution_trigger_id": "3", "trigger_item_id": "10003"},  # Archaludon: Metal Alloy
+] + [{"evolved_species_id": "869", "evolution_trigger_id": "3", "trigger_item_id": str(i)}   # Alcremie: any Sweet
+     for i in range(1167, 1174)]
+
+
+def get_pokemon_item_evolution_rows(pokemon_id):
+    """The evolution rows to check when an item is used on the Pokemon that
+    evolves into pokemon_id: the first row (as before) plus the later item rows
+    above."""
+    first = get_pokemon_evolution_data(pokemon_id)
+    rows = [first] if first else []
+    try:
+        pid = safe_int(pokemon_id)
+        if pid in _LATER_ITEM_EVOS:
+            rows += [r for r in _load_poke_evo_cache()
+                     if safe_int(r.get("evolved_species_id")) == pid and r is not first]
+        rows += [r for r in _EXTRA_ITEM_EVOS if safe_int(r["evolved_species_id"]) == pid]
+    except Exception:
+        pass
+    # "Level up holding X" (Oval Stone -> Chansey, Razor Claw -> Weavile, Razor
+    # Fang -> Gliscor): Ankimon has no held-item level-ups, so the item is used
+    # like a stone - the same as the trade-with-item evolutions (trigger 2).
+    # Hisuian Sneasler (903) stays out: a normal Sneasel becomes Weavile.
+    return [dict(r, evolution_trigger_id="2")
+            if str(r.get("evolution_trigger_id")) == "1" and r.get("held_item_id") and safe_int(pokemon_id) != 903
+            else r for r in rows]
 
 
 def check_key_in_table(column_name, value, file_path):

@@ -232,6 +232,41 @@ def create_menu_actions(
     update_action.triggered.connect(_open_update_dialog)
     help_menu.addAction(update_action)
 
+    # Ankimon 2.5: the battle engine download on demand (after a "Not now")
+    def _install_showdown():
+        try:
+            from .gym import showdown_setup as _sds
+        except Exception:
+            from aqt.utils import showInfo
+            showInfo("Pokémon Showdown comes with the gyms and showdown packages - turn them on in "
+                     "Ankimon > Other > Packages and restart Anki.")
+            return
+        _sds.install_now()
+
+    showdown_action = QAction("Install Showdown", mw)
+    showdown_action.setMenuRole(QAction.MenuRole.NoRole)
+    showdown_action.triggered.connect(_install_showdown)
+    help_menu.addAction(showdown_action)
+
+    # Ankimon 2.5: open the starter screen by hand (it sometimes doesn't
+    # appear on the very first start)
+    def _choose_starter_debug():
+        from aqt.utils import askUser
+        try:
+            from .singletons import starter_window as _sw
+            n = int(mw.ankimon_db.get_pokemon_count() or 0)
+        except Exception:
+            return
+        if n and not askUser("You already have %d Pokémon. Choosing a starter adds one more. "
+                             "Open the starter screen anyway?" % n):
+            return
+        _sw.display_starter_pokemon()
+
+    starter_action = QAction("Choose Starter (debug)", mw)
+    starter_action.setMenuRole(QAction.MenuRole.NoRole)
+    starter_action.triggered.connect(_choose_starter_debug)
+    help_menu.addAction(starter_action)
+
     # Version
     version_action = QAction(mw.translator.translate("ankimon_version_button"), mw)
     version_action.setMenuRole(QAction.MenuRole.NoRole)

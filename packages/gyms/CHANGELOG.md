@@ -1,4 +1,19 @@
 # gyms: changelog
+## October update
+- **Plan ahead:** hover the HUD's gym counter while you review to see who's next, their team and the types to bring. The team picker shows the same three lines (the long notes are gone).
+- **Move cards:** the battle window's move buttons show the move's type colour, category, power and accuracy, and whether it's super effective, not very effective or has no effect on the foe (its Tera type once it Terastallizes).
+- **Level locks** replace the level caps (see Pacing). Moves a Pokémon couldn't know at the level it fights at are sealed: they show greyed as "Sealed · Lv X", and it uses its Scaled Moves (wild package) or moves it could know.
+- **Double HP** in gym, rematch, expedition and legendary battles, so within a few levels a single hit rarely knocks a Pokémon out.
+- Wild legendaries, totems and Titans are tougher (the Elite Four aren't).
+- **Expeditions:** pick three, like gyms.
+- **Classic Elite Four:** a loss restarts the run from the first member.
+- **Mew:** meet your daily card goal 7 Anki days in a row, with Kanto's first three gyms beaten (in any region you're reviewing in), and Mew joins your team. Another 7-day streak earns another. Mew no longer appears in the wild.
+- **Evolution items in rematch loot:** all 16 of Kanto's from Kanto's leaders, and every other region's from a leader of a fitting type there.
+- **Legendaries can be shiny**, and you see it in the offer and the battle.
+- The battle summary reads "Your Team vs Wild Mewtwo" with the legendary's own name.
+- The HUD counter says "until you can retry Misty" after a loss and names the Elite Four or the Champion Cup, and sits a little higher above the HP boxes.
+- **Phone reviews count:** after a sync, reviews from your other devices count toward gyms, rematches and expeditions without a restart (EXP and training points come from desktop reviews).
+
 
 ## Gym ladders
 - **Kanto, exactly as in Red/Blue:** the 8 gyms, the Elite Four and the Champion, with the leaders' real teams and levels. Gym battles are 3 vs 3: a leader with more than three Pokémon keeps their ace and the next two strongest.
@@ -17,7 +32,7 @@
 - After a loss, a rematch opens after a set number of cards. "Not now" waits its own, shorter count.
 - The HUD shows the count ("50 / 1200 until Rustboro Gym (Roxanne)"). Once every condition is met it says "Roxanne is ready to battle - next card".
 - All three counts follow your daily card goal; see the recommendations in Settings.
-- **Level caps:** in each region your Pokémon fight at no higher than the next leader's ace + 5. They keep their real level and EXP; earning badges raises the cap, and beating a region's Champion removes it.
+- **Level locks:** against a leader, the Elite Four, a Champion, a rematch, an expedition or a legendary, your Pokémon fight at no higher than the opponent's strongest Pokémon (the old "next leader's ace + 5" cap is gone). They keep their real level and EXP, and lower-level Pokémon fight at their own level.
 
 ## Badges
 - Each region has its own badges. The badge case shows the region you're in, with art for every one: the official badges where the games have them (Kanto to Kalos, Galar), drawn emblems for the rest (Alola, Paldea, Elite Fours and Champions).
@@ -32,7 +47,7 @@ Legendaries follow the original games: the trio members that stay put and the bo
 **Difficulty:** tuned on Pokémon Showdown's rules for three Pokémon with a type advantage, at your level cap when the expedition opens (after the Champion: the Champion's ace + 3), starting each fight at full health (you can heal at camp between floors):
 - each legendary is won about 3 times in 4 (levels capped at 20 over that level: the Regis, Uxie, Azelf, Tapu Koko and Heatran are still a bit easier for a matched team);
 - the floors get harder as you go but each is won at least 9 times in 10. The defenders that countered the types you'd bring for the legendary were swapped (Froslass at Snowpoint Temple, Pyroar at Lysandre Labs, Aggron at Zygarde's Hollow, Bronzong at Spear Pillar) or levelled down.
-- A legendary is caught at the level you fought it; your level cap still applies to it in battle.
+- A legendary is caught at the level you fought it; level locks still apply to it in battle.
 - Galar's and Paldea's legendaries use the same level rule but haven't been through the simulations yet.
 
 | Region | Expedition | Legendary | Needs |
@@ -124,7 +139,7 @@ Expeditions can only be started in their own region (Game > Expeditions, from th
 - **They come back stronger:** 5 versions per leader, from the original fight up (Elite Four and Champions included), with evolved Pokémon and new moves at the right levels. The level follows your three strongest Pokémon +3 (within your level cap), never below the original fight.
 - **Always 3 vs 3:** leaders whose own team has two Pokémon (Brock, Misty, Falkner, Whitney, Chuck, Roxanne, Brawly, Tate and Liza, Cilan, Lenora, Viola, Grant, Milo) bring a third of their type from their own generation in rematches, e.g. Brock's Aerodactyl and Misty's Lapras.
 - **Rematch movesets hit back:** each Pokémon has its best attack, its best attack of another type and two support moves, so a team built on one counter type doesn't walk through. No Explosion or Self-Destruct.
-- **One rematch per gym interval** (the same number of cards as between gyms). Cards in every region count, and it doesn't stack. Starting a rematch uses it, win or lose.
+- **One rematch or expedition per gym interval** (the same number of cards as between gyms): when it's ready, choose either. Cards in every region count, and it doesn't stack. Starting one uses it, win or lose.
 - **Rewards:** cash and EXP scale with the level, plus 2-4 drops from the leader's themed loot (more and better at higher versions).
 - Rematches never change your badges, gym progress or gym timers.
 - A small "rematch ready" notice. Turn it off in Settings > Battle > Wild Battle Popups > Show Rematch Ready Popup.

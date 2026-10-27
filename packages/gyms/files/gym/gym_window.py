@@ -32,6 +32,7 @@ from aqt.qt import (
 
 from .gym_state import GymSession
 from . import gym_battle as GB
+from .move_card import MoveButton, card_info
 
 AUTO_TURN_MS = 1100
 
@@ -111,7 +112,7 @@ class GymBattleWindow(QDialog):
         grid.setContentsMargins(0, 6, 0, 0)
         self.move_buttons: List[QPushButton] = []
         for i in range(4):
-            b = QPushButton("-")
+            b = MoveButton("-")                 # a card for normal moves (move_card.py)
             b.setMinimumHeight(34)
             b.clicked.connect(lambda _=False, n=i: self._use_move_index(n))
             grid.addWidget(b, i // 2, i % 2)
@@ -290,7 +291,8 @@ class GymBattleWindow(QDialog):
             fm = QFontMetrics(f)
             for b in self.move_buttons:
                 if not b.isHidden():
-                    b.setMinimumWidth(fm.horizontalAdvance(b.text()) + 40)
+                    w = b.card_width() if getattr(b, "card_on", False) else 0
+                    b.setMinimumWidth(w or fm.horizontalAdvance(b.text()) + 40)
             lay = self.layout()
             if lay is not None:
                 lay.activate()
@@ -386,8 +388,9 @@ class GymBattleWindow(QDialog):
                     b.setVisible(True)
                     continue
                 zname = zmap.get(_mid(mv))
-                b.setText("%d.  %s%s      PP %d/%d"
-                          % (i + 1, str(mv).replace("-", " ").title(), "  ✦" if zname else "", left, mx))
+                # a card: type-coloured stripe, effectiveness against the foe out now, details
+                b.set_card("%d. %s%s" % (i + 1, str(mv).replace("-", " ").title(), "  ✦" if zname else ""),
+                           card_info(mv, self.session.leader_active, tr.get("foe")), "PP %d/%d" % (left, mx))
                 try:
                     from ..pyobj.attack_dialog import move_tooltip
                     tip = move_tooltip(mv)
@@ -406,7 +409,20 @@ class GymBattleWindow(QDialog):
                 b.setEnabled(bool(left) and not self.session.finished)
                 b.setVisible(True)
             else:
-                b.setVisible(False)
+                # moves sealed in this fight (above the level it fights at): shown, not usable
+                sealed = list((getattr(getattr(p, "source", None), "sealed_moves", None) or {}).items())
+                j = i - len(atks)
+                if j < len(sealed):
+                    mv, lv = sealed[j]
+                    info = dict(card_info(mv) or {"colour": "#888888", "details": ""}, kind=None,
+                                tag="Sealed · Lv %d" % lv)
+                    b.set_card(str(mv).replace("-", " ").title(), info, "")
+                    b.setToolTip("Sealed in this fight: it unlocks once this Pokémon fights at Lv %d or higher."
+                                 % lv)
+                    b.setEnabled(False)
+                    b.setVisible(True)
+                else:
+                    b.setVisible(False)
 
     # ------------------------------------------------------------- turns --
     def _use_move_index(self, n: int):

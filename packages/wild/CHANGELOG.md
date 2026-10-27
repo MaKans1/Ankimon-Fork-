@@ -1,4 +1,13 @@
 # wild: changelog
+## October update
+- **Wild levels on a bell curve:** centred on your badges' level range and widening with each badge, so low and high rolls both happen. The top 3% are Alphas; roaming legendaries and mythicals come from the top 1%.
+- **Evolved Pokémon at the high end:** a Pokémon below the middle of the curve is usually a first stage, above it an evolved one (4 times in 5; the rest is any stage open at that level).
+- **Scaled Moves:** a Pokémon fighting above the region's lock gets a second moveset there, shown beside Moves in its panel. **Remember a Scaled Move…** offers only moves it could know at that level. It's filled in for you the first time in a region (and again in a lower region), wild and gym battles both use it, and it disappears once the region's Champion is beaten. Your full moveset is untouched.
+- **Caught Pokémon join the region's wild Pokémon** if they weren't already there (an Arcanine once you've evolved one, say).
+- **Legendaries** never appear as ordinary wild Pokémon: they always come as 3-vs-1 legendary battles, and catch upgrades never replace them.
+- **Evolution items** drop only in the region of the Pokémon they evolve.
+- Your party is your buddy plus your team, at most 6.
+
 
 ## Battles
 - **Smarter moves on both sides:** buffs, debuffs and status when they help, otherwise the best attack. Your Pokémon uses only the moves you tick in the Buddy menu (click its sprite in the reviewer).
@@ -18,7 +27,7 @@
 
 ## Levels
 - **Wild Levels Follow Badges:** wild Pokémon get stronger with the badges you hold in the region you're in, like the routes in Red/Blue, with the odd stronger one. Off: they stay near your Pokémon's level.
-- Above a region's level cap your buddy fights at the cap, and the HUD shows the capped level and HP. It still gains EXP and levels for real, and shows its own level again once the cap passes it.
+- **Level lock:** until a region's Champion is beaten, your Pokémon fight wild Pokémon at no higher than the middle of the region's wild levels, and the HUD shows the locked level and HP. They still gain EXP and level up for real; a lower-level Pokémon is never raised.
 - Baby-evolution species appear at sensible levels (Pikachu, Clefairy…), and big ones like Snorlax and Chansey from Lv 20.
 
 ## Travel
@@ -32,12 +41,12 @@
 - A **badge** for registering every Pokémon of a region (mythicals not required).
 
 ## Rare encounters and evolutions
-- Starters appear in the wild about once in 100 encounters, in their home region.
+- Starters appear in the wild about once in 290 encounters, in their home region.
 - **Roaming legendaries, mythicals and Mewtwo** (needs the gyms package): very rarely, a powerful Pokémon crosses your path while you review. You're asked whether to battle it: pick three team members for a gym-style battle (auto or manual, as your gym setting), your three against it. Beat it to catch it; say no, or lose, and it flees. No rematches.
   - **Roamers** (about 1 in 150 encounters while one roams your region): Raikou and Entei (after Burned Tower), Latias, Mesprit, Cresselia, Tornadus and Thundurus, and Galarian Articuno, Zapdos and Moltres (after Galar's Champion). They keep their damage between meetings.
   - **Rare roamers** (as rarely as Mewtwo): the other half of a legendary pair you chose on an expedition (Zacian or Zamazenta, Regieleki or Regidrago, Koraidon or Miraidon), while you own your choice; and after Paldea's Champion, Okidogi, Munkidori, Fezandipiti, Ogerpon, Terapagos and Pecharunt.
   - **Mythicals and Mewtwo** (about 1 in 750, once their condition is met - badges and/or particular legendaries, nothing outside the game): Mewtwo (8 Kanto badges, 100 Kanto Pokémon registered), Celebi, Jirachi, Deoxys, Manaphy, Phione, Darkrai, Shaymin, Arceus, Victini, Keldeo, Meloetta, Genesect, Diancie, Hoopa, Volcanion, Zarude (after Galar's Champion).
-  - Their level is the top of your wild level range in the region + 12. One of each per save.
+  - Their level comes from the top 1% of the region's wild levels. One of each per save.
   - Your region's Expeditions page says when powerful Pokémon may be in the wild.
 - Legendaries can't be knocked out: beat one and you catch it.
 - **Kubfu** (Galar, once one has joined you; gyms package): about four times as often as Mewtwo, and more often shiny. It can be found again and again.
@@ -46,7 +55,7 @@
 - **Trade evolutions without trading:** Pokémon that evolve by trade (with no item) evolve at Lv 37 with high friendship.
 
 ## Alpha spawns
-- The odd stronger wild Pokémon can now be up to **12 levels** above the usual range, and is never weak.
+- **Alphas are the top 3% of the level curve:** the strongest rolls become Alphas, so they're always tough for your badges.
 
 ## Moves the wild engine can't run
 - In wild battles, neither side uses moves the wild engine can't handle properly:

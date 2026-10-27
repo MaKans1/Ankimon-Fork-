@@ -72,10 +72,16 @@ GEN_MAX = {1: 151, 2: 251, 3: 386, 4: 493, 5: 649, 6: 721, 7: 809, 8: 905, 9: 10
 # Red/Blue-style route levels by badges earned (9 = champion beaten)
 RB_BANDS = {0: (2, 7), 1: (5, 14), 2: (8, 18), 3: (13, 26), 4: (20, 30), 5: (22, 35),
             6: (25, 38), 7: (30, 42), 8: (40, 55), 9: (46, 67)}
-STRONG_PCT = 0.10          # share of strong ("Alpha") spawns
-STRONG_MAX = 12            # Alphas: up to this many levels above the band
+# Wild levels on a bell curve (user 2026-10-18): centred on the middle of your
+# badge band, spread SD_BASE + SD_PER_BADGE a badge (at the start +-5 levels is
+# 2 SD; every badge widens it), anything past +-SD_CUT re-rolled. The top
+# ALPHA_TOP of the curve are Alphas - no separate roll - and wild legendaries
+# come from its top LEGEND_TOP (gym/legends.level_for).
+SD_BASE, SD_PER_BADGE, SD_CUT = 2.5, 0.5, 3.0
+ALPHA_TOP = 0.03           # Alphas: the top 3% of the curve (was a separate 1-in-30 roll)
+LEGEND_TOP = 0.01          # wild legendaries: a level in the top 1%
 ALPHA_IV_FLOOR = 16        # Alphas: every IV rolled from 16 (~50%) to 31 - never forced to 31
-LEGEND_IV_FLOOR = 25       # legendaries: every IV from 25 (~80%) to 31 - never forced to 31
+LEGEND_IV_FLOOR = 21       # legendaries: every IV from 21 (~68%) to 31 - never forced to 31 (was 25)
 HEAL_BUDGET = 0.5          # wild may regain at most this share of max HP per encounter
 BABY_PREVO_STRONG_BST = 450  # Snorlax, Chansey, Lucario...: wild from Lv 20, not Lv 1
 
@@ -96,6 +102,7 @@ class _WildState:
         self.participants = []   # everyone who fought this encounter, in order
         self.meta_loaded = False
         self.alpha = False       # the spawn being generated is an Alpha
+        self.z = None            # where its level fell on the curve (SDs from the middle)
         self.kubfu = False       # the spawn being generated is a Kubfu (shiny x2)
         self.rounds = 0          # rounds fought this encounter
         self.team_sig = None     # (buddy, team slots) as the fight stands
@@ -193,15 +200,100 @@ def gen_of(dex):
     return None
 
 
+# --------------------------------------------- evolution items by region --
+# An evolution item drops (wild battles, gym wins) and sells only in regions
+# where it matters: the Pokemon it evolves, or evolves into, is from that
+# region's generation (user 2026-10-17: farm a region's evolution items there).
+# Only the item evolutions the game honours count (pokedex_functions
+# get_pokemon_item_evolution_rows), so regional-form items (Galarica Cuff,
+# Ice Stone for Alolan Vulpix) don't turn up in Kanto. Rematch loot follows
+# the same rule (regions_build/make_rematch_data.py).
+_EVO_ITEM_GENS = None
+
+
+def evo_item_gens():
+    """{item identifier: {generations it matters in}}, built once."""
+    global _EVO_ITEM_GENS
+    if _EVO_ITEM_GENS is not None:
+        return _EVO_ITEM_GENS
+    out = {}
+    try:
+        import csv
+        from ..resources import poke_evo_path, csv_file_items_cost
+        from ..functions.pokedex_functions import (_load_poke_species_cache, _EXTRA_ITEM_EVOS,
+                                                   get_pokemon_item_evolution_rows)
+        with open(csv_file_items_cost, encoding="utf-8") as f:
+            ident = {r["id"]: r["identifier"] for r in csv.DictReader(f)}
+        with open(poke_evo_path, encoding="utf-8") as f:
+            evos = {int(r["evolved_species_id"]) for r in csv.DictReader(f)}
+        evos |= {int(r["evolved_species_id"]) for r in _EXTRA_ITEM_EVOS}
+        species = _load_poke_species_cache() or {}
+        for evo in evos:
+            if not 0 < evo < 10000:
+                continue
+            pre = int((species.get(evo) or {}).get("evolves_from_species_id") or 0)
+            for r in get_pokemon_item_evolution_rows(evo):
+                t = str(r.get("evolution_trigger_id") or "")
+                name = ident.get(str(r.get("trigger_item_id") if t == "3" else r.get("held_item_id") if t == "2" else ""))
+                if name:
+                    out.setdefault(name, set()).update(g for g in (gen_of(pre) if pre else None, gen_of(evo)) if g)
+    except Exception as e:
+        print("Ankimon wild: evolution item regions skipped:", e)
+        out = {}
+    _EVO_ITEM_GENS = out
+    return out
+
+
+def item_drops_here(name) -> bool:
+    """False for an evolution item that does nothing in the region you're in."""
+    try:
+        gens = evo_item_gens().get(str(name).lower())
+        g = region_gen()
+        return not gens or g is None or g in gens
+    except Exception:
+        return True
+
+
 def region_name(dex):
     g = gen_of(dex)
     return REGIONS[g - 1] if g else "?"
 
 
+_LEGENDARY = []
+
+
+def legendary_ids():
+    """Every legendary / mythical species (Pokedex tags + gym/legends.py) - while
+    the legendary encounters are installed (gym package), the wild never offers
+    them as ordinary Pokemon: they're met in a 3-vs-1 battle, like Mewtwo
+    (user 2026-10-15). Without the gym package: empty, the old behaviour."""
+    if not _LEGENDARY:
+        ids = set()
+        try:
+            from ..gym.legends import LEGEND_IDS
+            ids |= set(LEGEND_IDS)
+        except Exception:
+            _LEGENDARY.append(set())          # no gym package: the old behaviour
+            return _LEGENDARY[0]
+        try:                                  # plus anything the Pokedex tags as legendary / mythical
+            from ..functions.pokedex_functions import _load_pokedex_cache
+            for v in (_load_pokedex_cache() or {}).values():
+                if set(v.get("tags") or []) & {"Restricted Legendary", "Sub-Legendary", "Mythical", "Legendary"}:
+                    try:
+                        ids.add(int(v.get("species_id") or 0))
+                    except (TypeError, ValueError):
+                        pass
+        except Exception:
+            pass
+        _LEGENDARY.append(ids)
+    return _LEGENDARY[0]
+
+
 def region_allows(dex):
-    """Only the current region's Pokémon appear in the wild (never NOT_WILD)."""
+    """Only the current region's Pokémon appear in the wild (never NOT_WILD,
+    never a legendary - those come through gym/legends.py)."""
     try:
-        if int(dex) in NOT_WILD:
+        if int(dex) in NOT_WILD or int(dex) in legendary_ids():
             return False
     except (TypeError, ValueError):
         pass
@@ -212,7 +304,8 @@ def filter_ids(ids):
     """A tier list -> this region's ids, so the spawn loop picks a valid
     species on the first try."""
     g = region_gen()
-    return [i for i in ids if isinstance(i, int) and gen_of(i) == g and i not in NOT_WILD]
+    leg = legendary_ids()
+    return [i for i in ids if isinstance(i, int) and gen_of(i) == g and i not in NOT_WILD and i not in leg]
 
 
 def _paradox(rng):
@@ -293,13 +386,19 @@ def band(reg=None):
 
 
 def level_cap(reg=None):
-    """Highest level your Pokémon fight at here (next leader's ace + 5);
+    """Highest level your Pokémon fight at in wild battles here: the middle of the
+    region's wild-level curve (user 2026-10-22 - it was the next leader's ace + 5,
+    so a new region got one-shot); only ever lowers a level, never raises one.
     None without the gym ladder or once the region's Champion is beaten."""
     try:
         from ..gym import gym_config, gym_data
         if not gym_config.enabled():
             return None
-        return gym_data.level_cap(_defeated(), reg or region())
+        cap = gym_data.level_cap(_defeated(), reg or region())
+        if cap is None:
+            return None
+        d = level_dist(reg)
+        return max(2, int(round(d[0]))) if d else cap
     except Exception:
         return None
 
@@ -369,16 +468,123 @@ def real_hp(pobj, engine_mon):
     return max(1, round(hp * rmax / emax))
 
 
-def pick_level(buddy_level, rng=random):
-    """Wild level from the badge band, or None to keep the classic +-3."""
-    bd = band()
+def _top_z(top):
+    """The z-score above which the top `top` share of the (+-SD_CUT) curve lies."""
+    from statistics import NormalDist
+    n = NormalDist()
+    return n.inv_cdf(n.cdf(SD_CUT) - top * (2 * n.cdf(SD_CUT) - 1))
+
+
+ALPHA_Z = _top_z(ALPHA_TOP)     # ~1.86
+LEGEND_Z = _top_z(LEGEND_TOP)   # ~2.28
+
+
+def level_dist(reg=None):
+    """(mean, sd) of wild levels here, or None in classic mode: the middle of the
+    badge band, spread SD_BASE + SD_PER_BADGE per badge."""
+    bd = band(reg)
     if bd is None:
         return None
-    _b, lo, hi = bd
-    STATE.alpha = rng.random() < STRONG_PCT
-    if STATE.alpha:
-        return min(100, hi + rng.randint(1, STRONG_MAX))
-    return rng.randint(lo, hi)
+    b, lo, hi = bd
+    return (lo + hi) / 2.0, SD_BASE + SD_PER_BADGE * int(b or 0)
+
+
+def _z_between(lo, hi, rng):
+    """A standard normal draw kept within [lo, hi] (re-rolled, so the shape holds)."""
+    for _ in range(5000):
+        z = rng.gauss(0.0, 1.0)
+        if lo <= z <= hi:
+            return z
+    return max(lo, min(hi, 0.0))
+
+
+def pick_level(buddy_level, rng=random):
+    """Wild level from the badge curve (sets STATE.alpha for the top 3%), or None
+    to keep the classic +-3."""
+    STATE.z = None
+    d = level_dist()
+    if d is None:
+        return None
+    mu, sd = d
+    z = _z_between(max(-SD_CUT, (1.5 - mu) / sd), SD_CUT, rng)      # nothing under Lv 2
+    STATE.alpha = z >= ALPHA_Z
+    STATE.z = z
+    return max(2, min(100, int(round(mu + z * sd))))
+
+
+# ------------------------------------------------ evolution stage by level --
+# Where a spawn's level falls on the curve picks its evolution stage (user
+# 2026-10-21): left of the middle -> first form, up to +1 SD -> second form,
+# beyond +1 SD -> fully evolved. STAGE_RULE_SHARE of spawns follow that; the
+# rest take any open stage, so the odd high-level unevolved Pokemon still turns
+# up. A stage is open only if this level reaches its wild minimum (its
+# evolution level; stone / trade forms never spawn wild), it lives in this
+# region, and it isn't a baby; a closed stage falls back to the nearest open one
+# below it.
+STAGE_RULE_SHARE = 0.8
+_KIDS = None
+
+
+def _line_stages(sid):
+    """[[stage-1 ids], [stage-2 ids], ...] of a species' evolution family."""
+    global _KIDS
+    from ..functions.pokedex_functions import _load_poke_species_cache
+    sp = _load_poke_species_cache() or {}
+    pre = {int(i): int(r.get("evolves_from_species_id") or 0) for i, r in sp.items()}
+    if _KIDS is None:
+        kids = {}
+        for i, p in pre.items():
+            if p:
+                kids.setdefault(p, []).append(i)
+        _KIDS = {p: sorted(v) for p, v in kids.items()}
+    root, seen = int(sid), set()
+    while pre.get(root) and root not in seen:
+        seen.add(root)
+        root = pre[root]
+    stages, cur = [], [root]
+    while cur:
+        stages.append(cur)
+        cur = [k for c in cur for k in _KIDS.get(c, [])]
+    return stages
+
+
+def stage_for(sid, level, rng=random):
+    """The family member to spawn instead of `sid` at this level, or None to keep it."""
+    z = getattr(STATE, "z", None)
+    if z is None:
+        return None
+    try:
+        from ..functions import encounter_data
+        from ..functions.encounter_functions import check_min_generate_level
+        from ..functions.pokedex_functions import search_pokedex_by_id
+        babies = set(encounter_data.BABY)
+
+        def open_(i):
+            return (i not in babies and region_allows(i)
+                    and check_min_generate_level(str(search_pokedex_by_id(i)).lower()) <= int(level))
+        stages = [[i for i in st if open_(i)] for st in _line_stages(sid)]
+        live = [n for n, st in enumerate(stages) if st]
+        if len(live) < 2:
+            return None
+        if rng.random() < STAGE_RULE_SHARE:
+            want = 0 if z < 0 else 1 if z < 1 else len(stages) - 1
+            pick = max([n for n in live if n <= want] or [min(live)])
+        else:
+            pick = rng.choice(live)
+        return rng.choice(stages[pick])
+    except Exception as e:
+        print("Ankimon wild: evolution stage skipped:", e)
+        return None
+
+
+def legend_level(reg=None, rng=random):
+    """A wild legendary's level: somewhere in the top 1% of the curve for your
+    badges in that region (above nearly every Alpha), or None in classic mode."""
+    d = level_dist(reg)
+    if d is None:
+        return None
+    mu, sd = d
+    return max(2, min(100, int(round(mu + _z_between(LEGEND_Z, SD_CUT, rng) * sd))))
 
 
 def floor_ivs(floor, rng=random):
@@ -566,17 +772,48 @@ def wild_moves(main_pokemon):
     return _usable(use or attacks)
 
 
+def fight_moves(main_pokemon, ticked=False):
+    """The moves it fights wild Pokemon with: its max-level moves, or - while the
+    region's cap holds it down - its scaled moves for this region
+    (functions/move_seal.py; built in the Pokemon panel, filled automatically the
+    first time). ticked: only the ones ticked for wild battles (all if none)."""
+    attacks = [a for a in (main_pokemon.attacks or []) if a]
+    iid = getattr(main_pokemon, "individual_id", None)
+    try:
+        cap = level_cap()
+        real = int(getattr(main_pokemon, "level", 0) or 0)
+        if cap and real > cap:
+            from aqt import mw
+            from ..functions import move_seal
+            rec = dict(mw.ankimon_db.get_pokemon(iid) or {})
+            rec.setdefault("name", getattr(main_pokemon, "name", ""))
+            rec["level"], rec["attacks"] = real, rec.get("attacks") or attacks
+            moves, changed = move_seal.scaled_moves(rec, region(), cap)
+            if changed and rec.get("individual_id"):
+                sm = dict(rec.get("scaled_moves") or {})
+                sm[region()] = moves
+                rec["scaled_moves"] = sm
+                mw.ankimon_db.save_pokemon(rec)
+            attacks = moves
+    except Exception as e:
+        print("Ankimon wild: scaled moves skipped:", e)
+    if ticked:
+        off = disabled_moves(iid)
+        return [a for a in attacks if move_id(a) not in off] or attacks
+    return attacks
+
+
 def choose_moves(main_pokemon, enemy_pokemon, s, rng=random):
     """(user_attack, enemy_attack) for this round. Falls back to the old
     random pick if anything goes wrong, so a review is never blocked."""
-    ua = _usable([a for a in (main_pokemon.attacks or []) if a])
+    ua = _usable(fight_moves(main_pokemon))
     ea = _usable([a for a in (enemy_pokemon.attacks or []) if a])
     user_attack = rng.choice(ua) if ua else "splash"
     enemy_attack = rng.choice(ea) if ea else "splash"
     try:
         me, foe = _battle_mons(main_pokemon, enemy_pokemon, s)
         mv, fv = _view(me), _view(foe)
-        mine = wild_moves(main_pokemon)
+        mine = _usable(fight_moves(main_pokemon, ticked=True)) or ua
         user_attack = wild_ai.choose(mine, mv, fv, move_data, _type_eff, rng,
                                      foe_moves=ea, history=STATE.hist_user) or user_attack
         if ea:
@@ -604,7 +841,10 @@ def after_turn(s, user_attack, enemy_attack, heals_to_opponent, main_pokemon=Non
         allowed = max(0, int(HEAL_BUDGET * max(1, opp.maxhp)) - STATE.healed)
         if heal > allowed:
             if opp.hp > 0:
-                opp.hp = max(1, opp.hp - (heal - allowed))
+                # Without the extra heal it may not have survived the turn: then
+                # it faints (it used to be held at 1 HP - a drain move that
+                # out-healed your hit kept it there forever).
+                opp.hp = max(0, opp.hp - (heal - allowed))
             heal = allowed
         STATE.healed += heal
         return heal
@@ -759,7 +999,9 @@ def _heal(p):
 
 
 def party():
-    """Fighting order: your buddy, then team slots 1-6 (buddy not repeated)."""
+    """Fighting order: your buddy, then your team in slot order, skipping the
+    buddy - six in all. The buddy is one of your six (the team window keeps it
+    in); if it isn't on the team, it takes the last place."""
     from aqt import mw
     db = mw.ankimon_db
     _load_meta()
@@ -776,7 +1018,7 @@ def party():
                     order.append(iid)
             except Exception:
                 pass
-    return order
+    return order[:6]
 
 
 def ready_teammates():
@@ -953,7 +1195,7 @@ def share_exp(exp, finisher, logger=None, evo_window=None):
 
 # ------------------------------------------------------ special spawns ----
 # Starters: a little rarer than anything else in the wild (not shiny-rare).
-STARTER_RATE = 0.01          # ~1 encounter in 100
+STARTER_RATE = 0.0035        # ~1 encounter in 286 (was 1 in 100; user 2026-10-15: 65% rarer)
 STARTERS = {1: [1, 4, 7], 2: [152, 155, 158], 3: [252, 255, 258], 4: [387, 390, 393],
             5: [495, 498, 501], 6: [650, 653, 656], 7: [722, 725, 728], 8: [810, 813, 816],
             9: [906, 909, 912]}
@@ -1013,6 +1255,50 @@ def legendary_moves(name, level):
         return None
 
 
+# Species you've owned that this region's wild never offers - stone / trade /
+# friendship evolutions like Arcanine, or anything not in the region's lists -
+# join its wild pool once caught or evolved, each at a tenth of a normal
+# species' chance (user 2026-10-15). Legendaries come back via gym/legends.py.
+OWNED_SHARE = 0.1
+_owned_cache = {}
+
+
+def _owned_extras():
+    """(extra species ids, size of the normal pool) for the region you're in."""
+    try:
+        from . import dex
+        reg = set(dex.registered())
+    except Exception:
+        return [], 1
+    key = (region(), len(reg))
+    if key in _owned_cache:
+        return _owned_cache[key]
+    from ..functions import encounter_data as E
+    from ..functions.encounter_functions import check_min_generate_level
+    from ..functions.pokedex_functions import search_pokedex_by_id
+    LEGEND_IDS = legendary_ids()
+    pool = set(filter_ids(E.NORMAL)) | set(filter_ids(E.BABY)) | set(filter_ids(E.ULTRA))
+    g = region_gen()
+    extras = []
+    for i in sorted(reg):
+        try:
+            i = int(i)
+        except (TypeError, ValueError):
+            continue
+        if gen_of(i) != g or i in NOT_WILD or i in LEGEND_IDS:
+            continue
+        if i in pool:
+            try:
+                if check_min_generate_level(str(search_pokedex_by_id(i)).lower()) < 100:
+                    continue                    # the wild already offers it
+            except Exception:
+                continue
+        extras.append(i)
+    _owned_cache.clear()
+    _owned_cache[key] = (extras, max(1, len(pool)))
+    return _owned_cache[key]
+
+
 def special_spawn(rng=random):
     """A rare spawn for this encounter, or None. Never right after a flee.
     In Area Zero every encounter is a Paradox Pokemon."""
@@ -1035,6 +1321,12 @@ def special_spawn(rng=random):
         if region() == "Galar" and galar.kubfu_joined() and rng.random() < galar.KUBFU_RATE:
             STATE.kubfu = True
             return {"id": galar.KUBFU, "tier": "Legendary"}
+    except Exception:
+        pass
+    try:                                         # Pokemon you've caught that the wild never offers
+        extras, n = _owned_extras()
+        if extras and rng.random() < OWNED_SHARE * len(extras) / n:
+            return {"id": rng.choice(extras), "tier": "Normal"}
     except Exception:
         pass
     try:

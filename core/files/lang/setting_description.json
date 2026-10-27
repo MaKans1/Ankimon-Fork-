@@ -73,6 +73,7 @@
     "battle.wild_levels_follow_badges": "Wild Pokémon get stronger as you earn badges in the region you're in. Off: they stay near your Pokémon's level.",
     "misc.region": "The region you are in: its wild Pokémon, gyms, wild levels and level cap. Change it from Ankimon > Game > Travel. (Default: Kanto)",
     "battle.duplicate_level_window": "With Prioritize Average IV: how many levels apart two copies can be for better IVs to win. Beyond this, the higher level wins. Larger = IVs matter over a wider level range.",
+    "battle.keep_duplicates": "How many copies of each species you keep. New catches fill free copies first; once they're all taken, a better catch replaces your weakest copy (Upgrade Behavior). Species that evolve several ways keep at least one per final form, legendaries are always kept, and favorites are never replaced.",
     "gym.showdown_engine": "Gym battles follow the real games' rules. Off: a simpler engine.",
     "gym.original_movesets": "Unticked (default) = Modernized, the more balanced choice. Ticked = Original: each leader's moves from their original games.",
     "battle.upgrade_priority": "Which copy wins when you catch a species you already own. Prioritize Level: the higher level always wins (better IVs only break a tie). Prioritize Average IV: within the Duplicate Level Window below, better IVs win; beyond it, the higher level wins. *Favorited Pokémon are never replaced.",

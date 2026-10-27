@@ -50,7 +50,7 @@ def _log(lvl, m):
         print("[expedition] %s" % m)
 
 
-LEGEND_IV_FLOOR = 25        # same floor as wild_rules.LEGEND_IV_FLOOR
+LEGEND_IV_FLOOR = 21        # same floor as wild_rules.LEGEND_IV_FLOOR (was 25; user 2026-10-15: too easy to perfect)
 
 # ------------------------------------------------------------ unlocks ----
 EXPEDITION_REGION = "Kanto"      # default region (the birds live in Kanto)
@@ -301,10 +301,12 @@ def _team_records() -> List[dict]:
     return recs[:6]
 
 
-def build_team() -> List[Combatant]:
+def build_team(records=None, cap=None) -> List[Combatant]:
+    """The three you picked (or, without a pick, your team). cap: the expedition's
+    strongest foe - anything above it fights at it (gym_battle.boss_level)."""
     out = []
-    for rec in _team_records():
-        p = GB._obj_from_saved(copy.deepcopy(rec))
+    for rec in (records if records is not None else _team_records()):
+        p = GB._obj_from_saved(copy.deepcopy(rec), cap)
         if p is None:
             continue
         pp = GB.build_pp(p.attacks)
@@ -338,9 +340,10 @@ def build_foes(floor) -> List[Combatant]:
 
 # ---------------------------------------------------------------- run ----
 class ExpeditionRun:
-    def __init__(self, exp: Expedition):
+    def __init__(self, exp: Expedition, records=None, auto=None):
         self.exp = exp
-        self.team = build_team()
+        self.team = build_team(records, max((int(m.level) for f in exp.floors for m in f.foes), default=None))
+        self.auto = CFG.auto_battle() if auto is None else bool(auto)
         self.floor_i = 0
         self.sd = None
         self.window = None
@@ -377,13 +380,14 @@ class ExpeditionRun:
         gym = SimpleNamespace(gym_id=None, name="%s: %s" % (self.exp.name, floor.name),
                               leader=leader, badge_name="", cash_reward=floor.cash,
                               team=floor.foes, kind="expedition", is_elite=False,
+                              guard=(GB.BOSS_GUARD if floor.boss else None),   # the legendary: hidden guard
                               region=getattr(self.exp, "region", EXPEDITION_REGION))
         session = GymSession(gym, alive, foes)
         if self.sd is not None:
             try:
                 from . import dmax as _dm, tera as _tr
                 self.sd.start(alive, foes, leader, wild=True, dynamax=_dm.config_for(gym),
-                              tera=_tr.config_for(gym))
+                              tera=_tr.config_for(gym), guard=GB.guard_for(gym), hp_mult=GB.HP_MULT)
                 session.engine = self.sd
             except Exception as e:
                 _log("warning", "Showdown could not start this floor, using classic: %s" % e)
@@ -395,7 +399,7 @@ class ExpeditionRun:
         _log("info", "%s, %s: engine = %s" % (self.exp.name, floor.name,
                                                "Showdown" if session.engine is not None else "classic"))
         from .gym_window import GymBattleWindow
-        self.window = GymBattleWindow(session, CFG.auto_battle(), self._floor_done, parent=mw)
+        self.window = GymBattleWindow(session, self.auto, self._floor_done, parent=mw)
         self.window.show()
         self.window.raise_()
         self.window.activateWindow()
@@ -676,11 +680,9 @@ class ExpeditionMenu(QDialog):
         self.setMinimumWidth(560)
         v = QVBoxLayout(self)
         v.addWidget(QLabel(
-            "<b>Expeditions</b> - three floors of defenders, then a legendary. "
-            "Damage carries over between floors; camp between them to use items. "
-            "The legendary has to be beaten in one go. Beat it = catch it.<br>"
-            "<span style='color:gray'>Your team: %s</span>" % (
-                ", ".join("%s Lv %d" % (c.name, c.level) for c in build_team()) or "none")))
+            "<b>Expeditions</b> - pick three of your team for three floors of defenders, then a "
+            "legendary. Damage carries over between floors; camp between them to use items. "
+            "The legendary has to be beaten in one go. Beat it = catch it.<br>%s" % _gate_line()))
         reg = here()
         local = [e for e in EXPEDITIONS if getattr(e, "region", EXPEDITION_REGION) == reg]
         if not local:
@@ -701,7 +703,7 @@ class ExpeditionMenu(QDialog):
             text.setWordWrap(True)
             row.addWidget(text, 1)
             b = QPushButton("Set out")
-            b.setEnabled(ok and not _busy())
+            b.setEnabled(ok and not _busy() and _gate_ready())
             b.clicked.connect(lambda _c=False, e=exp: self._go(e))
             row.addWidget(b)
             v.addWidget(box)
@@ -773,7 +775,30 @@ def start(exp: Expedition) -> bool:
     if not ok:
         QMessageBox.information(mw, "Expedition", label)
         return False
-    run = ExpeditionRun(exp)
+    if not _gate_ready():
+        have, need = _gate()
+        QMessageBox.information(mw, "Expedition", "Your next challenge (a rematch or an expedition) "
+                                "is %d cards away." % max(0, need - have))
+        return False
+    # pick three, like a gym: the legendary is tuned for three type-matched Pokemon
+    from . import gym_ui
+    party = GB.available_party()
+    if len(party) < 3:
+        QMessageBox.information(mw, "Expedition", "You need at least three Pokémon in your team.")
+        return False
+    boss = exp.boss
+    dlg = gym_ui.TeamSelectDialog(SimpleNamespace(
+        name=exp.name, leader=exp.legendary, type_theme=_boss_type(exp), blurb=exp.blurb,
+        team=list(boss.foes) if boss is not None else list(exp.floors[-1].foes),
+        recommended_level=(boss.foes[0].level if boss is not None else 0)), party, parent=mw)
+    if dlg.exec() != QDialog.DialogCode.Accepted:
+        return False
+    try:
+        from . import rematch
+        rematch.consume()                  # the shared challenge is used, win or lose
+    except Exception as e:
+        _log("warning", "could not use the challenge: %s" % e)
+    run = ExpeditionRun(exp, dlg.selected, dlg.auto_battle)
     _run = run
     try:
         if not run.start():
@@ -785,6 +810,38 @@ def start(exp: Expedition) -> bool:
         QMessageBox.warning(mw, "Expedition", "Could not start: %s" % e)
         return False
     return True
+
+
+def _gate():
+    """(cards so far, cards needed) for the shared rematch / expedition challenge."""
+    try:
+        from . import rematch
+        return rematch.counter()
+    except Exception:
+        return 1, 1
+
+
+def _gate_ready() -> bool:
+    have, need = _gate()
+    return have >= need
+
+
+def _gate_line() -> str:
+    have, need = _gate()
+    if have >= need:
+        return "<b>A challenge is ready</b> - an expedition or a gym rematch."
+    return ("<span style='color:gray'>%d / %d cards until your next challenge (an expedition or "
+            "a gym rematch).</span>" % (have, need))
+
+
+def _boss_type(exp) -> str:
+    try:
+        from ..functions.pokedex_functions import search_pokedex
+        boss = exp.boss
+        name = boss.foes[0].species if boss is not None else exp.legendary
+        return "/".join(search_pokedex(str(name).lower(), "types") or []) or "?"
+    except Exception:
+        return "?"
 
 
 def open_menu():

@@ -364,6 +364,16 @@ def generate_random_pokemon(
             str(name.lower())
         )  # Gets the minimum allowed level for that pokemon given its stage of evolution
 
+    # Evolution stage from where the level fell on the curve (wild_rules.stage_for)
+    try:
+        from ..wild import wild_rules as _wild
+        _stage = _wild.stage_for(pokemon_id, wild_pokemon_lvl)
+        if _stage and _stage != pokemon_id:
+            pokemon_id = _stage
+            name = search_pokedex_by_id(pokemon_id)
+    except Exception:
+        pass
+
     # Rare spawns: wild starters (~1 in 100) and, once unlocked, Mewtwo
     _special = None
     try:
@@ -946,6 +956,34 @@ def _vs(caught, mine, window):
     return False, "yours is higher level (Lv %d vs Lv %d)" % (own_lv, wild_lv)
 
 
+def _keep_duplicates():
+    """Settings > Keep Duplicates: copies of each species you keep (at least 1)."""
+    try:
+        return max(1, min(99, int(settings_obj.get("battle.keep_duplicates") or 1)))
+    except (TypeError, ValueError):
+        return 1
+
+
+def _is_legendary(species_id):
+    """Legendary / mythical (gym/legends.py's list, else the Pokedex tags)."""
+    try:
+        sid = int(species_id)
+    except (TypeError, ValueError):
+        return False
+    try:
+        from ..gym.legends import LEGEND_IDS, FORMS
+        if sid in LEGEND_IDS or sid in FORMS:
+            return True
+    except Exception:
+        pass
+    try:
+        from .pokedex_functions import search_pokedex, search_pokedex_by_id
+        tags = search_pokedex(str(search_pokedex_by_id(sid)).lower(), "tags") or []
+        return any(t in ("Restricted Legendary", "Sub-Legendary", "Mythical", "Legendary") for t in tags)
+    except Exception:
+        return False
+
+
 def _duplicate_verdict(caught, window=None):
     """(keep, owned_copy, why) for a wild Pokémon against the copies you own.
 
@@ -964,7 +1002,12 @@ def _duplicate_verdict(caught, window=None):
              if p and p.get("id") == species_id and bool(p.get("shiny")) == shiny]
     if not owned:
         return True, None, "first shiny" if shiny else "new species"
-    slots = _branch_slots(species_id)
+    # Ankimon 2.5: a legendary is never replaced - you keep every one you catch
+    if _is_legendary(species_id):
+        return True, None, "a legendary - you keep every one"
+    # Settings > Keep Duplicates raises how many of each species you keep
+    # (a species that evolves several ways keeps one per final form anyway)
+    slots = max(_branch_slots(species_id), _keep_duplicates())
     if slots > 1 and len(owned) < slots:
         return True, None, "it evolves %d ways, so you keep %d (this is #%d)" % (slots, slots, len(owned) + 1)
     if slots <= 1:

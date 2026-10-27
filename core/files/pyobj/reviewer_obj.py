@@ -203,7 +203,7 @@ class Reviewer_Manager:
                     _th = int(self.settings.get("gui.review_hp_bar_thickness")) * 4
                 except Exception:
                     _th = 0
-                _bottom = 25 + _sp + _th
+                _bottom = 25 + _sp + _th + 34      # just above the HP boxes (it ran into them)
                 # Two lines so it fits the gap between the HP readouts.
                 # progress_text returns "8 / 60 until rematch vs Misty";
                 # split on the first " until " and stack the halves.
@@ -214,13 +214,39 @@ class Reviewer_Manager:
                                  % (_parts[0].strip(), _parts[1].strip()))
                 else:
                     _gym_html = _gym_line
+                # Follow Anki's theme (it was always white: invisible in light
+                # mode), outlined in the other colour to read over any card
+                try:
+                    from aqt.theme import theme_manager
+                    _night = bool(theme_manager.night_mode)
+                except Exception:
+                    _night = True
+                _fg, _halo = (("#FFFFFF", "0 0 3px #000,0 0 2px #000,0 0 1px #000") if _night
+                              else ("#1F1F27", "0 0 3px #FFF,0 0 2px #FFF,0 0 1px #FFF"))
+                # Hovering it shows who's next, their team and the types to
+                # bring (gym_ui.progress_tip); without a tip it lets the mouse through.
+                try:
+                    _tip = _gym.progress_tip()
+                except Exception:
+                    _tip = ""
+                _hover = ""
+                if _tip:
+                    _bg, _bd = (("#2B2B30", "#55555C") if _night else ("#FFFFFF", "#C8C8CE"))
+                    _gym_html += ('<div id="gym-tip" hidden style="position:absolute;'
+                                  'bottom:100%%;left:50%%;transform:translateX(-50%%);'
+                                  'margin-bottom:6px;width:260px;padding:8px 10px;'
+                                  'background:%s;border:1px solid %s;border-radius:6px;'
+                                  'text-shadow:none;text-align:left;font-weight:normal;'
+                                  'font-size:12px;line-height:1.5;">%s</div>' % (_bg, _bd, _tip))
+                    _hover = (' onmouseenter="this.lastChild.hidden=false"'
+                              ' onmouseleave="this.lastChild.hidden=true"')
                 _gs = ('position:fixed;bottom:%dpx;left:50%%;'
                        'transform:translateX(-50%%);z-index:9999;'
                        'font-family:Arial,sans-serif;font-size:12px;'
-                       'font-weight:bold;color:#FFFFFF;text-align:center;'
-                       'line-height:1.15;max-width:210px;'
-                       'pointer-events:none;' % _bottom)
-                hud_html += ('<div id="gym-progress" class="Ankimon" '
+                       'font-weight:bold;color:%s;text-shadow:%s;text-align:center;'
+                       'line-height:1.15;max-width:210px;cursor:default;'
+                       'pointer-events:%s;' % (_bottom, _fg, _halo, "auto" if _tip else "none"))
+                hud_html += ('<div id="gym-progress" class="Ankimon"' + _hover + ' '
                              'style="' + _gs + '">' + _gym_html + '</div>')
         except Exception:
             pass

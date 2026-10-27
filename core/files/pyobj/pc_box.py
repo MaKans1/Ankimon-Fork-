@@ -1190,15 +1190,15 @@ class PokemonPC(QDialog):
                 return True
             if not bag:
                 return False
-            from ..functions.pokedex_functions import pokemon_evolves_from_id, get_pokemon_evolution_data
+            from ..functions.pokedex_functions import pokemon_evolves_from_id, get_pokemon_item_evolution_rows
             lv = int(p.get("level") or 1)
             for evo in pokemon_evolves_from_id(int(p["id"])) or []:
-                d = get_pokemon_evolution_data(int(evo)) or {}
-                trig = str(d.get("evolution_trigger_id") or "")
-                item = (str(d.get("trigger_item_id") or "") if trig == "3"
-                        else str(d.get("held_item_id") or "") if trig == "2" else "")
-                if item and item in bag and lv >= self._item_gate(int(d.get("evolved_species_id") or evo)):
-                    return True
+                for d in get_pokemon_item_evolution_rows(int(evo)):
+                    trig = str(d.get("evolution_trigger_id") or "")
+                    item = (str(d.get("trigger_item_id") or "") if trig == "3"
+                            else str(d.get("held_item_id") or "") if trig == "2" else "")
+                    if item and item in bag and lv >= self._item_gate(int(d.get("evolved_species_id") or evo)):
+                        return True
         except Exception:
             pass
         return False

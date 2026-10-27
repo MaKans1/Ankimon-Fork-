@@ -31,6 +31,17 @@ from ..resources import items_path, user_path, pokemon_tm_learnset_path
 # Daily Rotating Items Pool
 DAILY_ITEMS_POOL = daily_item_list()
 
+
+def _pool_here(n=0):
+    """The shop's pool for the region you're in: evolution items only where they
+    matter (wild_rules.item_drops_here)."""
+    try:
+        from ..wild import wild_rules as _wild
+        pool = [i for i in DAILY_ITEMS_POOL if _wild.item_drops_here(i["name"])]
+        return pool if len(pool) >= n else DAILY_ITEMS_POOL
+    except Exception:
+        return DAILY_ITEMS_POOL
+
 # Standard Items
 # Always in stock - heals and revives for Expeditions (no Poke Balls)
 STANDARD_ITEMS = [{"name": n} for n in (
@@ -448,12 +459,13 @@ class PokemonShopManager:
         shop_data = db.get_user_data("todays_shop")
         if shop_data:
             if shop_data.get("items") and shop_data.get("date") == datetime.now().strftime("%Y-%m-%d"):
-                return shop_data.get("items")
+                sellable = {i["name"] for i in DAILY_ITEMS_POOL}      # today's list may predate a fix
+                return [i for i in shop_data.get("items") if i.get("name") in sellable]
 
         seed = datetime.now().strftime("%Y-%m-%d")
         # a private RNG: seeding the global one made every random roll
         # (shinies, spawns...) repeat in the same order after opening the shop
-        return random.Random(seed).sample(DAILY_ITEMS_POOL, self.number_of_daily_items)
+        return random.Random(seed).sample(_pool_here(self.number_of_daily_items), self.number_of_daily_items)
 
     def get_daily_tms(self):
         """Works like get_daily_items, but for TMs"""
@@ -496,6 +508,8 @@ class PokemonShopManager:
         colors = self._get_theme_colors()
 
         try:
+            if not item.get("price"):          # no price: a reward, not for sale
+                raise ValueError("this item isn't sold in the shop")
             if self.settings_obj.get("trainer.cash") < item["price"]:
                 msg = QMessageBox(mw)
                 msg.setWindowTitle("Ankimon Mart")
@@ -583,7 +597,7 @@ class PokemonShopManager:
         # Generate new random items
         random.seed()  # Use current time for truly random reroll
         self.todays_daily_items = random.sample(
-            DAILY_ITEMS_POOL, self.number_of_daily_items
+            _pool_here(self.number_of_daily_items), self.number_of_daily_items
         )
         self.todays_daily_tms = random.sample(
             self.get_tm_pool(), self.number_of_daily_items

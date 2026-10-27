@@ -8,9 +8,10 @@ rematch.py - rematch gym leaders you've beaten.
     level cap applies), never below the original fight. The team is the
     leader's rematch version for that level (rematch_data: evolved Pokemon,
     newer moves - up to 6 versions per leader).
-  * One rematch per gym interval (Settings > Gyms > Reviews Between Gym
-    Challenges). Cards count in every region; it doesn't stack. Starting a
-    rematch uses it, win or lose.
+  * One challenge per gym interval (Settings > Gyms > Reviews Between Gym
+    Challenges), shared with expeditions: a rematch OR an expedition. Cards
+    count in every region; it doesn't stack. Starting either uses it, win or
+    lose.
   * Rewards: cash scaled to the level, EXP (scales with their levels), and
     2-4 drops from the leader's themed loot (more and better at higher
     versions). Badges and gym progress are never touched.
@@ -100,7 +101,8 @@ def on_review():
         P.set_meta(_META_NOTIFIED, stamp)
         if _popup_on() and P.defeated_ids():
             from aqt.utils import tooltip
-            tooltip("A gym rematch is ready - Ankimon > Game > Expeditions.", period=4000)
+            tooltip("A challenge is ready - a gym rematch or an expedition (Ankimon > Game > Expeditions).",
+                    period=4000)
     except Exception:
         pass
 
@@ -167,11 +169,11 @@ class RematchDialog(QDialog):
         self.setMinimumSize(620, 420)
         v = QVBoxLayout(self)
         have, need = counter()
-        status = ("<b>A rematch is ready.</b>" if have >= need
-                  else "%d / %d cards until your next rematch." % (have, need))
+        status = ("<b>A challenge is ready</b> - a rematch or an expedition." if have >= need
+                  else "%d / %d cards until your next challenge (a rematch or an expedition)." % (have, need))
         head = QLabel("<b>Gym rematches - %s</b><br>%s<br><span style='color:gray'>Leaders you've "
                       "beaten here come back stronger, scaled to your team, with their own loot. "
-                      "One rematch per gym interval; cards count in every region.</span>"
+                      "One rematch or expedition per gym interval; cards count in every region.</span>"
                       % (current_region(), status))
         head.setWordWrap(True)
         v.addWidget(head)

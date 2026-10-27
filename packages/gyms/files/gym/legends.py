@@ -29,7 +29,7 @@ from aqt.qt import QMessageBox, QTimer, QApplication
 ROAMER_RATE = 1.0 / 150
 SPAWN_RATE = 1.0 / 750
 STRONG = 12                     # fallback offset (legends_data.DEFAULT_OFFSET)
-IV_FLOOR = 25                   # ~80%; never a forced 31
+IV_FLOOR = 21                   # ~68% (was 25; user 2026-10-15); never a forced 31
 LEGEND_GYM_BASE = 900000        # synthetic gym ids for these fights (never stored)
 
 # dex id: (name, region, condition). Conditions (all must hold):
@@ -89,6 +89,18 @@ SPAWNS = {
     720: ("Hoopa", "Kalos", {"legends": 10}),
     721: ("Volcanion", "Kalos", {"fire_water": True}),
     893: ("Zarude", "Galar", {"champion": True}),
+    # These only ever spawned through Ankimon's old wild tables, which no longer
+    # offer legendaries (wild_rules.legendary_ids): now Mewtwo-style encounters.
+    772: ("Type: Null", "Alola", {"champion": True}),
+    789: ("Cosmog", "Alola", {"champion": True}),
+    792: ("Lunala", "Alola", {"owns": (791,)}),       # Cosmog's line evolves into Solgaleo here
+    800: ("Necrozma", "Alola", {"champion": True, "owns": (791,)}),
+    801: ("Magearna", "Alola", {"champion": True}),
+    802: ("Marshadow", "Alola", {"champion": True}),
+    807: ("Zeraora", "Alola", {"champion": True}),
+    808: ("Meltan", "Alola", {"champion": True}),
+    809: ("Melmetal", "Alola", {"owns": (808,)}),     # Meltan can't evolve in Ankimon
+    905: ("Enamorus", "Galar", {"champion": True}),
 }
 REGION_GEN = {"Kanto": 1, "Johto": 2, "Hoenn": 3, "Sinnoh": 4, "Unova": 5, "Kalos": 6,
               "Alola": 7, "Galar": 8, "Paldea": 9}
@@ -96,7 +108,8 @@ REGION_GEN = {"Kanto": 1, "Johto": 2, "Hoenn": 3, "Sinnoh": 4, "Unova": 5, "Kalo
 LEGEND_IDS = ({144, 145, 146, 150, 151} | set(range(243, 246)) | set(range(249, 252))
               | set(range(377, 387)) | set(range(480, 495)) | set(range(638, 650))
               | set(range(716, 722)) | set(range(785, 810)) | set(range(888, 899))
-              | set(range(1001, 1011)) | set(range(1014, 1018)) | {1024, 1025})
+              | set(range(1001, 1011)) | set(range(1014, 1018)) | {1024, 1025}
+              | {772, 773, 905})
 # Mewtwo keeps its hand-picked set (wild_rules.LEGEND_SETS)
 
 _pending = None                 # {"id", "kind"} waiting to be offered on the next card
@@ -136,7 +149,51 @@ def _wild():
 
 
 def _name(i):
-    return (ROAMERS.get(i) or SPAWNS.get(i) or ("#%d" % i,))[0]
+    hit = ROAMERS.get(i) or SPAWNS.get(i)
+    if hit:
+        return hit[0]
+    try:
+        from ..functions.pokedex_functions import search_pokedex_by_id, display_name
+        return display_name(search_pokedex_by_id(int(i)))
+    except Exception:
+        return "#%d" % i
+
+
+# --------------------------------------------- legendaries you've caught --
+# Every legendary you've caught can turn up again in its home region at
+# Mewtwo's rarity (SPAWN_RATE), as the same 3-vs-1 encounter - the Kanto birds
+# after their expeditions, too - and every one you catch is kept (catches never
+# replace a legendary: encounter_functions._duplicate_verdict). Not Paradox
+# Pokemon (Area Zero only) or Kubfu / Urshifu (their own spawn and towers).
+# Mew (151): only the 7-day goal streak gift (gym/mew.py), never the wild (user 2026-10-17).
+_SKIP_AGAIN = {151, 891, 892, 984, 985, 986, 987, 988, 989, 990, 991, 992, 993, 994, 995,
+               1005, 1006, 1009, 1010, 1020, 1021, 1022, 1023}
+
+
+def _home(i):
+    """The region a legendary belongs to."""
+    hit = ROAMERS.get(i) or SPAWNS.get(i)
+    if hit:
+        return hit[1]
+    try:
+        from . import expedition
+        for e in expedition.EXPEDITIONS:
+            if int(getattr(e, "legendary_id", 0) or 0) == int(i):
+                return e.region
+    except Exception:
+        pass
+    for name, gen in REGION_GEN.items():
+        lo = {1: 1, 2: 152, 3: 252, 4: 387, 5: 494, 6: 650, 7: 722, 8: 810, 9: 906}[gen]
+        hi = {1: 151, 2: 251, 3: 386, 4: 493, 5: 649, 6: 721, 7: 809, 8: 905, 9: 1025}[gen]
+        if lo <= int(i) <= hi:
+            return name
+    return None
+
+
+def again_here(region):
+    """Legendaries you've caught that can turn up again here."""
+    ids = (set(LEGEND_IDS) | set(FORMS)) - _SKIP_AGAIN
+    return sorted(i for i in ids if _home(i) == region and caught(i))
 
 
 # ------------------------------------------------------------ conditions --
@@ -249,6 +306,10 @@ def roll(rng=random) -> bool:
         if once and rng.random() < SPAWN_RATE:
             _pending = {"id": rng.choice(once), "kind": "spawn", "region": region}
             return True
+        again = again_here(region)
+        if again and rng.random() < SPAWN_RATE:          # a legendary you've caught, again
+            _pending = {"id": rng.choice(again), "kind": "spawn", "region": region}
+            return True
     except Exception as e:
         _log("warning", "roll skipped: %s" % e)
     return False
@@ -282,6 +343,15 @@ def offset_for(i, top) -> float:
 
 
 def level_for(region, i=None) -> int:
+    """A wild legendary's level: in the top 1% of the region's badge curve
+    (wild_rules.legend_level, user 2026-10-18); without badge levels
+    (classic mode), the old top-of-band + per-legendary offset."""
+    try:
+        lv = _wild().legend_level(region)
+        if lv:
+            return int(lv)
+    except Exception:
+        pass
     top = None
     try:
         b = _wild().band(region)
@@ -335,6 +405,11 @@ def build(entry):
     g.legend_id = i
     g.legend_kind = kind
     g.legend_ivs = {k: random.randint(IV_FLOOR, 31) for k in ("hp", "atk", "def", "spa", "spd", "spe")}
+    try:                               # shiny is decided when it appears, so the fight shows it
+        from ..functions.pokemon_functions import shiny_chance
+        g.legend_shiny = bool(shiny_chance())
+    except Exception:
+        g.legend_shiny = False
     hp = _meta_get("legend_hp_%d" % i) if kind == "roamer" else None
     try:
         g.legend_hp = max(0.05, min(1.0, float(hp))) if hp not in (None, "") else 1.0
@@ -353,6 +428,7 @@ def prepare(leader, gym):
     try:
         src.iv = dict(gym.legend_ivs)
         src.tier = "Legendary"
+        src.shiny = bool(getattr(gym, "legend_shiny", False))
         mx = int(src.calculate_max_hp())
         hp = max(1, int(round(mx * float(getattr(gym, "legend_hp", 1.0)))))
         c.max_hp, c.hp = mx, hp
@@ -380,9 +456,10 @@ def _offer():
         hurt = getattr(g, "legend_hp", 1.0) < 1.0
         r = QMessageBox.question(
             mw, "A powerful Pokémon!",
-            "A wild %s appeared! It's very strong (Lv %d)%s.\n\n"
+            "A wild %s appeared!%s It's very strong (Lv %d)%s.\n\n"
             "Battle it with three of your Pokémon? Beat it to catch it. "
-            "If you don't, it flees." % (g.leader, g.team[0].level,
+            "If you don't, it flees." % (g.leader, " And it's SHINY!" if getattr(g, "legend_shiny", False) else "",
+                                        g.team[0].level,
                                         " - still hurt from your last meeting" if hurt else ""),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes)
@@ -420,7 +497,7 @@ def finish(session):
             mx = int(src.calculate_max_hp())
             src.iv = dict(g.legend_ivs)
             src.max_hp = src.hp = src.current_hp = mx
-            src.shiny = bool(shiny_chance())
+            src.shiny = bool(getattr(g, "legend_shiny", False))     # rolled when it appeared (build)
             src.tier = "Legendary"
             src.stat_stages = {k: 0 for k in ("atk", "def", "spa", "spd", "spe", "accuracy", "evasion")}
             src.battle_status = "fighting"

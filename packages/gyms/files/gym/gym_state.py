@@ -204,8 +204,11 @@ class GymSession:
         return self.status != self.ACTIVE
 
     def summary(self) -> str:
-        return "%s vs %s — %s (you %d/%d left, leader %d/%d left, %d turns)" % (
-            self.gym.name, self.gym.leader, self.status,
+        # a wild legendary's fight is named "Wild Mew" with Mew as its leader
+        head = ("Your Team vs %s" % self.gym.name if getattr(self.gym, "is_legend", False)
+                else "%s vs %s" % (self.gym.name, self.gym.leader))
+        return "%s — %s (you %d/%d left, leader %d/%d left, %d turns)" % (
+            head, self.status,
             self.player_remaining(), len(self.player_team),
             self.leader_remaining(), len(self.leader_team), self.turns)
 
@@ -320,6 +323,13 @@ class GymProgress:
         self.db.execute(
             "UPDATE gym_progress SET defeated=1, defeated_at=? WHERE gym_id=?",
             (when, gym_id))
+        self._commit()
+
+    def reset_wins(self, gym_ids):
+        """Classic Elite Four: the wins of a run you lost don't count
+        (gym_battle.finish_session)."""
+        for gid in gym_ids:
+            self.db.execute("UPDATE gym_progress SET defeated=0, defeated_at=NULL WHERE gym_id=?", (gid,))
         self._commit()
 
     def unlock_point(self, gym, cadence: int) -> int:

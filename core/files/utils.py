@@ -331,7 +331,7 @@ def random_item():
             continue
         if name.endswith("-incense"):
             continue
-        if name.endswith("-fang"):
+        if name.endswith("-fang") and name != "razor-fang":     # Razor Fang evolves Gligar
             continue
         if name.endswith("dust"):
             continue
@@ -359,6 +359,12 @@ def random_item():
             _LAST_TM[0] = tm_name           # item_display_name() names the move
             return _tm_sprite_for_move(tm_name)
 
+    # evolution items only in regions where they matter (wild_rules.item_drops_here)
+    try:
+        from .wild import wild_rules as _wild
+        item_names = [n for n in item_names if _wild.item_drops_here(n)] or item_names
+    except Exception:
+        pass
     item_name = random.choice(item_names)
     # add item to item list
     give_item(item_name)
@@ -457,9 +463,12 @@ def daily_item_list():
 
         # Filter out excluded items
         if (
-            get_item_price(item_name) == 0
+            not get_item_price(item_name)              # 0 or no price at all
             or item_name in USELESS_ITEMS
             or any(item_name.endswith(suffix) for suffix in excluded_suffixes)
+            # rewards from later regions: Z-Crystals, Tera Shards, key items
+            or item_name in REWARD_ONLY or item_name == "z-ring"
+            or item_name.endswith(("ium-z", "-tera-shard"))
         ):
             continue
 

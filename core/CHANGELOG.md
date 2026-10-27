@@ -1,6 +1,21 @@
 # Core: general patches (changelog)
 
 Bug fixes and quality-of-life changes on top of Ankimon 2.03. The core is always installed; the big systems (gyms, wild, showdown) are separate packages.
+## October update
+- **Training points:** your buddy earns a point for every half of your daily card goal you review (2 a day at your goal). Spend them with the **+** beside a stat in the Pokémon's details to raise it; a maxed stat shows MAX, and a Pokémon with all six maxed shows PERFECT. Points you already had are kept. Friendship no longer gives points (friendship evolutions are unchanged).
+- **Evolution items:**
+  - items the newer games added for older Pokémon now work: Thunder Stone on Magneton and Charjabug, Leaf Stone and Ice Stone on Eevee, Prism Scale on Feebas, Ice Stone on Crabrawler;
+  - Oval Stone, Razor Claw and Razor Fang are used from the bag like stones;
+  - new items with their own art: Metal Alloy, Syrupy Apple, both Teacups, Chipped Pot and the seven Sweets;
+  - every evolution item can be found: random drops and the Mart only offer the ones for Pokémon of the region you're in, and each is in a gym leader's rematch loot there (gyms package).
+- **Pokémon details:** hover the ability for what it does; how the Pokémon evolves is always shown.
+- **Team picker:** Sort by name, Pokédex number, average IV or level.
+- **Keep Duplicates** (Settings): how many copies of each species catch upgrades keep.
+- **Type chart:** seven matchups now follow the current games (Ghost is super effective on Psychic, Fighting resists Dark, Ice is resisted by Fire, and Poison/Bug and Dark/Poison/Steel are fixed). It drives the effectiveness tags on gym move buttons.
+- **Help > Install Showdown:** the battle-engine download on demand.
+- Pacing: a gym about every half day's cards at your goal; see Settings for the recommended values.
+- Fixes: Remember Attacks updates the move list right away; the Friendship label is no longer cut off; saving your team shows one popup instead of two; the Mart no longer lists reward-only items.
+
 
 ## Names and text
 - **Real Pokémon names.** Wild Pokémon used to be named by an internal lookup key, giving "Ironhands", "Jangmoo", "Farfetchd" and "Mr. mime". They're now "Iron Hands", "Jangmo-o", "Farfetch'd" and "Mr. Mime". Saved Pokémon are migrated once.
@@ -86,10 +101,10 @@ These moves do nothing in Ankimon's one-on-one battles, or only help the opponen
 ## Settings
 - **Goal of Daily Average Cards** drives pacing. Gym intervals and EXP each show "For your goal of N cards a day, recommended: X", and are filled in when you change the goal. The target is about four months to clear all gyms and expeditions at your goal.
 - New defaults for the default goal (100 cards a day, 2 cards per round):
-  - 225 cards between gyms (was 100);
-  - 60 before a rematch (was 100);
-  - 40 after "Not now" (was 25);
-  - EXP ×4.33 (was ×1.0).
+  - 50 cards between gyms (a gym about every half day's cards);
+  - 30 before a retry;
+  - 20 after "Not now";
+  - EXP ×10.
 - Short, plain descriptions for every new setting.
 - **Retired** (hidden; their values stay in your config):
   - Card Max Time and Styling in Reviewer: nothing read them.

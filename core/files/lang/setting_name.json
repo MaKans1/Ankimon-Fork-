@@ -66,6 +66,7 @@
     "battle.show_battle_popups": "Show Battle Log Popups",
     "battle.replace_duplicate_catches": "Replace Duplicate Catches",
     "battle.duplicate_level_window": "Duplicate Level Window",
+    "battle.keep_duplicates": "Keep Duplicates",
     "battle.wild_levels_follow_badges": "Wild Levels Follow Badges",
     "battle.popup_damage": "Show Damage and Heal Popups",
     "battle.popup_faint": "Show Faint, Switch and Flee Popups",

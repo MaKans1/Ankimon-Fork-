@@ -184,15 +184,17 @@ class ShowdownBattle:
 
     # --- battle ------------------------------------------------------------
     def start(self, player_team, leader_team, leader_label="The leader", wild=False, totem=None, dynamax=None,
-              tera=None, titan=None):
+              tera=None, titan=None, guard=None, hp_mult=1.0):
         """totem: {"aura": {...}} for an Alola totem trial (gymsim.js totem rules).
         dynamax: {"p1": bool, "p2": bool} - who may Dynamax (Galar; dmax.config_for).
         tera: {"p1": bool, "p2": bool} - who may Terastallize (Paldea; tera.config_for)."""
         self.p_team, self.l_team = list(player_team), list(leader_team)
-        r = self._ask({"cmd": "start", "p1": [_set_from(c) for c in self.p_team],
+        self.hp_mult = float(hp_mult or 1.0)       # battle HP; Combatants keep real HP
+        r = self._ask({"cmd": "start", "hpmult": self.hp_mult, "p1": [_set_from(c) for c in self.p_team],
                        "p2": [_set_from(c) for c in self.l_team], "leader": leader_label,
                        "wild": bool(wild), "totem": totem or None, "dynamax": dynamax or None,
-                       "tera": tera or None, "titan": titan or None})
+                       "tera": tera or None, "titan": titan or None,
+                       "guard": {"mult": float(guard)} if guard else None})
         self._apply(r)
         return r.get("log") or []
 
@@ -214,8 +216,10 @@ class ShowdownBattle:
                 if i is None or not (0 <= i < len(team)):
                     continue
                 c = team[i]
-                c.max_hp = int(v["maxhp"]) or c.max_hp
-                c.hp = 0 if v.get("fainted") else max(0, int(v["hp"]))
+                m = getattr(self, "hp_mult", 1.0) or 1.0       # battle HP back to real HP
+                c.max_hp = int(round(int(v["maxhp"]) / m)) or c.max_hp
+                hp = 0 if v.get("fainted") else max(0, int(v["hp"]))
+                c.hp = 0 if hp <= 0 else max(1, int(round(hp / m)))
                 c._sd_active = bool(v.get("active"))
                 c.status = None if c.hp <= 0 else (v.get("status") or None)
                 c._tags = _tags_for(v)

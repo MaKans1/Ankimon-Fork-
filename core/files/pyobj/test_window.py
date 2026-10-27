@@ -210,8 +210,23 @@ class TestWindow(QWidget):
         bp_lbl = self.translator.translate("bp_label")
         painter.drawText(48, 104, f"{cp_lbl} {enemy_cp:,}")
         painter.drawText(48, 118, f"{bp_lbl} {enemy_bp:,}")
-        painter.drawText(326, 216, f"{cp_lbl} {main_cp:,}")
-        painter.drawText(326, 230, f"{bp_lbl} {main_bp:,}")
+        # Your box: CP / BP under the HP bar, left of the HP numbers (they
+        # shared the bar's row and ran into its "HP" tag). The free space is
+        # about 98 x 21 px: the largest font that fits both lines.
+        _t1, _t2 = f"{cp_lbl} {main_cp:,}", f"{bp_lbl} {main_bp:,}"
+        try:
+            from aqt.qt import QFontMetrics
+            _lang = int(self.settings_obj.get("misc.language"))
+            for _size in (14, 12, 10):
+                _f = load_custom_font(_size, _lang)
+                _fm = QFontMetrics(_f)
+                if max(_fm.horizontalAdvance(_t1), _fm.horizontalAdvance(_t2)) <= 98:
+                    break
+            painter.setFont(_f)
+        except Exception:
+            pass
+        painter.drawText(326, 228, _t1)
+        painter.drawText(326, 239, _t2)
 
     def pokemon_display_first_encounter(self):
         # Main window layout

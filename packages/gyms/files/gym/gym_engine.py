@@ -185,13 +185,16 @@ class EngineBattle:
     """One gym fight. Combatants (gym_state) stay the HP/PP authority for the
     UI; the engine State is the authority for everything else."""
 
-    def __init__(self, player_team, leader_team, leader_label="The leader", totem=None, titan=None):
+    def __init__(self, player_team, leader_team, leader_label="The leader", totem=None, titan=None,
+                 guard=None, hp_mult=1.0):
+        self.guard = float(guard) if guard else None     # hidden boss guard (gym_battle.guard_for)
+        self.hp_mult = float(hp_mult or 1.0)             # battle HP (gym_battle.HP_MULT)
         self.p_team = list(player_team)
         self.l_team = list(leader_team)
         self.leader_label = leader_label
         self.by = {"user": {}, "opponent": {}}
-        self.state = State(self._side(self.p_team, self.by["user"]),
-                           self._side(self.l_team, self.by["opponent"]),
+        self.state = State(self._side(self.p_team, self.by["user"], self.hp_mult),
+                           self._side(self.l_team, self.by["opponent"], self.hp_mult),
                            None, None, False)
         # Alola totem trial: the totem (named "Totem ...") + its reinforcements.
         self.totem = dict(totem) if totem else None
@@ -210,7 +213,7 @@ class EngineBattle:
 
     # --- construction ------------------------------------------------
     @staticmethod
-    def _side(team, by_id):
+    def _side(team, by_id, hp_mult=1.0):
         mons = []
         for c in team:
             src = c.source
@@ -221,7 +224,7 @@ class EngineBattle:
                                               "accuracy", "evasion")}
             src.hp = src.current_hp = int(c.hp)
             pk = src.to_poke_engine_Pokemon()
-            pk.hp, pk.maxhp = int(c.hp), int(c.max_hp)
+            pk.hp, pk.maxhp = int(round(int(c.hp) * hp_mult)), int(round(int(c.max_hp) * hp_mult))
             # Ankimon hands moves over as bare {"id": ...}. The engine's switch
             # routine also reads "disabled" and "current_pp" on every move of
             # the Pokemon leaving the field - without them the first faint
@@ -268,7 +271,7 @@ class EngineBattle:
                 c = self.by[side].get(mon.id)
                 if c is None:
                     continue
-                c.hp = max(0, int(mon.hp))
+                c.hp = 0 if int(mon.hp) <= 0 else max(1, int(round(int(mon.hp) / self.hp_mult)))
                 try:
                     c.source.hp = c.source.current_hp = c.hp
                     c.source.battle_status = mon.status or ("fainted" if c.hp <= 0 else "fighting")
@@ -289,7 +292,12 @@ class EngineBattle:
             mut = StateMutator(self.state)
             outs = get_all_state_instructions(mut, pm, lm)
             o = random.choices(outs, weights=[x.percentage for x in outs])[0]
+            boss = self._boss_mon() if self.guard else None
+            before = boss.hp if boss is not None else None
             mut.apply(o.instructions)
+            if boss is not None and before is not None and boss.hp < before:
+                lost = before - boss.hp                  # the guard: a quarter of it back
+                boss.hp = min(boss.maxhp, boss.hp + (lost - int(round(lost * self.guard))))
             held = self._totem_hold() or self._titan_hold()
             said = self._describe(o.instructions, names)
             if held:                    # it didn't faint after all: it held on
@@ -336,6 +344,13 @@ class EngineBattle:
             return None
         mon.hp = lock
         return "%s held on!" % self.totem_c.name
+
+    def _boss_mon(self):
+        """The engine mon of the boss (the leader's first Pokemon)."""
+        boss = self.l_team[0] if self.l_team else None
+        s = self._side_obj("opponent")
+        return next((m for m in [s.active] + list(s.reserve.values())
+                     if self.by["opponent"].get(m.id) is boss), None)
 
     def _totem_allies(self, gone=None):
         return [c for c in self.l_team if c is not self.totem_c and c is not gone and c.hp > 0

@@ -75,6 +75,12 @@ def on_review_card(*args):
     s = _state
 
     try:
+        # --- training points: your buddy earns one per half daily goal --
+        try:
+            from .functions import training as _trn
+            _trn.on_review()
+        except Exception:
+            pass
         # --- gym ladder (optional package) ------------------------------
         try:
             from .gym import gym_ui as _gym
