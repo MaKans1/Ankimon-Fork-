@@ -1,7 +1,7 @@
 # Core: general patches (changelog)
 
 Bug fixes and quality-of-life changes on top of Ankimon 2.03. The core is always installed; the big systems (gyms, wild, showdown) are separate packages.
-## October update
+## 2.6 (October 2026)
 - **Training points:** your buddy earns a point for every half of your daily card goal you review (2 a day at your goal). Spend them with the **+** beside a stat in the Pokémon's details to raise it; a maxed stat shows MAX, and a Pokémon with all six maxed shows PERFECT. Points you already had are kept. Friendship no longer gives points (friendship evolutions are unchanged).
 - **Evolution items:**
   - items the newer games added for older Pokémon now work: Thunder Stone on Magneton and Charjabug, Leaf Stone and Ice Stone on Eevee, Prism Scale on Feebas, Ice Stone on Crabrawler;
@@ -116,7 +116,7 @@ These moves do nothing in Ankimon's one-on-one battles, or only help the opponen
 ## Packages
 - **Ankimon > Other > Packages…** switches gyms, wild and showdown on or off (restart to apply). Your Pokémon and progress are kept either way.
 - **One update file for everyone:** updating with the full file keeps the packages you had, including for players who installed only some of them.
-- **Help > Update** downloads the newest Ankimon 2.x (Ankimon.ankiaddon) and shows the steps. It used to download the original Ankimon, which would have replaced 2.x. In 2.0 the same button gets 2.5.
+- **Help > Update** downloads the newest Ankimon 2.x (Ankimon.ankiaddon) and shows the steps. It used to download the original Ankimon, which would have replaced 2.x. In 2.0 the same button gets the newest version.
 - **Updating from inside Anki works:** when Anki installs an Ankimon update, Ankimon first closes its save file and log (on Windows the update used to stop with "Access is denied").
 - **New items:** Z-Ring and Z-Crystals (Alola), Dynamax Band (Galar), Tera Orb and Tera Shards (Paldea), Herba Mystica (eat it from the bag) and the four ruinous stakes. Key items have no Use button, and none of these are random drops.
 - Package files that live in user_files (badge art, the Showdown helper) now update with the add-on. Before, Anki kept the old copies.

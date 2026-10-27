@@ -1,22 +1,22 @@
-# Ankimon 2.5
+# Ankimon 2.6
 
-## ⬇ [Download Ankimon 2.5](https://github.com/MaKans1/Ankimon-Fork-/releases/latest/download/Ankimon.ankiaddon)
+## ⬇ [Download Ankimon 2.6](https://github.com/MaKans1/Ankimon-Fork-/releases/latest/download/Ankimon.ankiaddon)
 
 **New to Ankimon?** Click the link above, then double-click the downloaded file. Anki installs everything, then restart Anki.
 **Already have Ankimon?** Same file. Your Pokémon, items and progress are kept.
 
 ## 🔄 [Update](https://github.com/MaKans1/Ankimon-Fork-/releases/latest/download/Ankimon.ankiaddon)
 
-**Already playing Ankimon 2.0 or 2.5?**
+**Already playing Ankimon 2.0, 2.5 or 2.6?**
 1. Click **Update** above.
 2. Double-click the downloaded file.
 3. Restart Anki.
 
-It's the same file for everyone, whether you installed everything or only some packages. Ankimon keeps the packages you had, and your Pokémon and progress. In Anki, **Ankimon > Help > Update > Download** gets the same file, in 2.0 too (it downloads 2.5). On the first start after updating, the new badges, item art and battle files are put in place by themselves. Updates come out at most once a day. *Last updated: Oct 26, 2026.*
+It's the same file for everyone, whether you installed everything or only some packages. Ankimon keeps the packages you had, and your Pokémon and progress. In Anki, **Ankimon > Help > Update > Download** gets the same file, in 2.0 too (it downloads the newest version). On the first start after updating, the new badges, item art and battle files are put in place by themselves. Updates come out at most once a day. *Last updated: Oct 26, 2026.*
 
 **If Anki says "Access is denied" while updating** (on Windows, Ankimon 2.0 and the first 2.5 download keep their save file open, and Windows won't let Anki move it): close Anki, start it again while holding **Shift** (add-ons stay off for that session), then Tools > Add-ons > Install from file… and choose the downloaded file. Restart Anki. From this version on, Ankimon closes the file itself, so updating the normal way works.
 
-A fan-made overhaul of [Ankimon](https://ankiweb.net/shared/info/1908235722), the Anki add-on that turns your reviews into a Pokémon adventure. Ankimon 2.5 adds gym ladders in all nine regions (with Alola's totem trials, Galar's Dynamax and Paldea's open world and Terastallization), travel between regions, smarter wild battles, legendary expeditions, and a progression curve built to last months at your own daily card goal.
+A fan-made overhaul of [Ankimon](https://ankiweb.net/shared/info/1908235722), the Anki add-on that turns your reviews into a Pokémon adventure. Ankimon 2.6 adds gym ladders in all nine regions (with Alola's totem trials, Galar's Dynamax and Paldea's open world and Terastallization), travel between regions, smarter wild battles, legendary expeditions, and a progression curve built to last months at your own daily card goal.
 
 It's split into a **core** (general patches: fixes and quality-of-life changes) and three optional **packages** for the big systems, so you can install only what you want. Each one has a README and a CHANGELOG:
 [core](core/CHANGELOG.md) · [gyms](packages/gyms/CHANGELOG.md) · [wild](packages/wild/CHANGELOG.md) · [showdown](packages/showdown/CHANGELOG.md)
@@ -46,7 +46,7 @@ Switch packages back on the same way. Updates keep your choice. showdown needs g
 (The core-only file and the package zips are still on the [Releases](../../releases) page for manual installs; to update, use the full file.)
 
 ### Updates
-Anki won't offer to "update" back to the official 2.03 on AnkiWeb, because 2.5 counts as newer. If Ankimon's authors later publish a newer version on AnkiWeb, Anki will offer it, and accepting would replace 2.5 (your save is kept).
+Anki won't offer to "update" back to the official 2.03 on AnkiWeb, because 2.6 counts as newer. If Ankimon's authors later publish a newer version on AnkiWeb, Anki will offer it, and accepting would replace 2.6 (your save is kept).
 
 ## First start
 New players get a short setup:
@@ -129,7 +129,7 @@ build.py                       maintainers: python build.py -> dist/release (the
 
 ## Credits and license
 
-- **Ankimon** by Unlucky-Life and h0tp, licensed GPL-3.0. Ankimon 2.5 is a modified version under the same license (see `LICENSE`).
+- **Ankimon** by Unlucky-Life and h0tp, licensed GPL-3.0. Ankimon 2.6 is a modified version under the same license (see `LICENSE`).
 - **Pokémon Showdown** (MIT) by the Smogon team, and **@pkmn/sim** (MIT) by pkmn. Both are downloaded by the setup script, not included here.
 - **Gym rosters** come from the original games, via the pret disassemblies (pokered, pokecrystal, pokeruby) and published references for later generations.
 - Pokémon and all related names are trademarks of Nintendo, Creatures Inc. and GAME FREAK inc. This is an unofficial fan project, not affiliated with or endorsed by them or by the Ankimon authors.

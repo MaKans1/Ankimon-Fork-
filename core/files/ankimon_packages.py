@@ -240,7 +240,7 @@ def open_dialog():
     dlg = QDialog(mw)
     dlg.setWindowTitle("Ankimon Packages")
     v = QVBoxLayout(dlg)
-    head = QLabel("<b>Ankimon 2.5 packages</b><br>Untick a package to switch it off. "
+    head = QLabel("<b>Ankimon 2.6 packages</b><br>Untick a package to switch it off. "
                   "Your Pokémon, items and progress are kept either way. "
                   "Changes apply when you restart Anki, and updates keep your choice.")
     head.setWordWrap(True)

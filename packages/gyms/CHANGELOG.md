@@ -1,5 +1,5 @@
 # gyms: changelog
-## October update
+## 2.6 (October 2026)
 - **Plan ahead:** hover the HUD's gym counter while you review to see who's next, their team and the types to bring. The team picker shows the same three lines (the long notes are gone).
 - **Move cards:** the battle window's move buttons show the move's type colour, category, power and accuracy, and whether it's super effective, not very effective or has no effect on the foe (its Tera type once it Terastallizes).
 - **Level locks** replace the level caps (see Pacing). Moves a Pokémon couldn't know at the level it fights at are sealed: they show greyed as "Sealed · Lv X", and it uses its Scaled Moves (wild package) or moves it could know.

@@ -1,5 +1,5 @@
 # wild: changelog
-## October update
+## 2.6 (October 2026)
 - **Wild levels on a bell curve:** centred on your badges' level range and widening with each badge, so low and high rolls both happen. The top 3% are Alphas; roaming legendaries and mythicals come from the top 1%.
 - **Evolved Pokémon at the high end:** a Pokémon below the middle of the curve is usually a first stage, above it an evolved one (4 times in 5; the rest is any stage open at that level).
 - **Scaled Moves:** a Pokémon fighting above the region's lock gets a second moveset there, shown beside Moves in its panel. **Remember a Scaled Move…** offers only moves it could know at that level. It's filled in for you the first time in a region (and again in a lower region), wild and gym battles both use it, and it disappears once the region's Champion is beaten. Your full moveset is untouched.
