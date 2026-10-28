@@ -77,7 +77,17 @@ def on_review():
             db.set_user_data(COUNT_KEY, n)
             return
         db.set_user_data(COUNT_KEY, 0)
-        rec = db.get_main_pokemon()
+        # Only your buddy trains - not a teammate fighting in its place after it
+        # fainted (team rotation makes that one the saved buddy until the
+        # encounter ends; wild_rules.buddy_iid still names yours)
+        rec = None
+        try:
+            from ..wild import wild_rules as _wr
+            _iid = _wr.buddy_iid()
+            rec = db.get_pokemon(_iid) if _iid else None
+        except Exception:
+            rec = None
+        rec = rec or db.get_main_pokemon()
         if not rec or not rec.get("individual_id"):
             return
         rec["training_earned"] = _int(rec.get("training_earned")) + 1

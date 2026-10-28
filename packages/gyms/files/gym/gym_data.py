@@ -416,6 +416,22 @@ def champion_beaten(defeated_ids, region: Optional[str] = None) -> bool:
 # ----------------------------------------------------------- level caps --
 CAP_MARGIN = 5          # you may be this many levels above the next ace
 CAP_AFTER_INTRO = 10    # region whose ladder isn't finished yet: last ace + this
+CAP_BADGES = 3          # badges in another region before any level cap applies (user 2026-10-27)
+
+
+def caps_apply(defeated_ids, region: Optional[str] = None) -> bool:
+    """Level caps and boss level locks are for strength brought in from elsewhere
+    (user 2026-10-27): they apply in a region only while you hold CAP_BADGES or
+    more badges in some OTHER region (a beaten Champion counts). Your first region
+    is never capped, and neither is anywhere before you've built a team up in
+    another. level_cap() still lifts a region's cap once its Champion falls."""
+    region = region or current_region()
+    for reg in LADDERS:
+        if reg == region:
+            continue
+        if champion_beaten(defeated_ids, reg) or badges_earned(defeated_ids, reg) >= CAP_BADGES:
+            return True
+    return False
 
 
 def ace_level(gym) -> int:
@@ -425,9 +441,12 @@ def ace_level(gym) -> int:
 def level_cap(defeated_ids, region: Optional[str] = None) -> Optional[int]:
     """Highest level your Pokémon fight at in this region: the next leader's
     strongest Pokémon + CAP_MARGIN. None once the region's Champion is beaten.
-    A region whose later gyms aren't built yet: last ace + CAP_AFTER_INTRO."""
+    A region whose later gyms aren't built yet: last ace + CAP_AFTER_INTRO.
+    None, too, until caps_apply (3+ badges in another region)."""
     lad = ladder(region)
     if champion_beaten(defeated_ids, region):
+        return None
+    if not caps_apply(defeated_ids, region):
         return None
     nxt = next_gym(defeated_ids, region)
     if nxt is not None:

@@ -59,6 +59,8 @@ class PokemonObject:
         self.type = type
         self.gender = gender
         self.tier = tier
+        # Ankimon 2.6: an Unown's letter (functions/unown.py); None for everything else
+        self.special_form = kwargs.get("special_form")
         self.everstone = everstone
         self.evolution_rejected = evolution_rejected
         self.pokemon_defeated = pokemon_defeated
@@ -292,7 +294,8 @@ class PokemonObject:
         return hp
 
     def get_sprite_path(self, side, sprite_type):
-        return get_sprite_path(side, sprite_type, self.id, self.shiny, self.gender)
+        return get_sprite_path(side, sprite_type, self.id, self.shiny, self.gender,
+                               form=getattr(self, "special_form", None))
 
     def to_engine_format(self):
         from ..poke_engine.helpers import normalize_name

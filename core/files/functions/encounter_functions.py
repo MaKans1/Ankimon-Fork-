@@ -508,9 +508,15 @@ def new_pokemon(
         ev_yield,
         is_shiny,
     ) = generate_random_pokemon(main_pokemon.level, ankimon_tracker_obj)
+    try:
+        from .unown import roll as _unown_roll       # Ankimon 2.6: an Unown's letter
+        _letter = _unown_roll(pkmn_id)
+    except Exception:
+        _letter = None
     pokemon_data = {
         "name": display_name(name),
         "id": pkmn_id,
+        "special_form": _letter,
         "level": level,
         "ability": ability,
         "type": pkmn_type,
@@ -984,6 +990,23 @@ def _is_legendary(species_id):
         return False
 
 
+def _same_letter(a, b):
+    """Ankimon 2.6: Unown letters are separate copies - an A only competes with an A."""
+    try:
+        from .unown import same_letter
+        return same_letter(a, b)
+    except Exception:
+        return True
+
+
+def _letter_of(p):
+    try:
+        from .unown import suffix
+        return suffix(p)
+    except Exception:
+        return ""
+
+
 def _duplicate_verdict(caught, window=None):
     """(keep, owned_copy, why) for a wild Pokémon against the copies you own.
 
@@ -999,7 +1022,8 @@ def _duplicate_verdict(caught, window=None):
     species_id = caught.get("id")
     shiny = bool(caught.get("shiny"))
     owned = [p for p in (ankimon_db.get_all_pokemon() or [])
-             if p and p.get("id") == species_id and bool(p.get("shiny")) == shiny]
+             if p and p.get("id") == species_id and bool(p.get("shiny")) == shiny
+             and _same_letter(p, caught)]
     if not owned:
         return True, None, "first shiny" if shiny else "new species"
     # Ankimon 2.5: a legendary is never replaced - you keep every one you catch
@@ -1041,6 +1065,7 @@ def is_catch_upgrade(enemy_pokemon):
         if settings_obj.get("battle.replace_duplicate_catches") is False:
             return shiny                      # old behaviour: always catch shinies
         rec = {"id": enemy_pokemon.id, "level": enemy_pokemon.level, "shiny": shiny,
+               "special_form": getattr(enemy_pokemon, "special_form", None),
                "iv": dict(getattr(enemy_pokemon, "iv", None) or {})}
         keep, best, _why = _duplicate_verdict(rec)
         # Regular and shiny are separate one-per-species slots, so this is
@@ -1065,7 +1090,7 @@ def resolve_duplicate_catch(caught, logger=None):
             return caught.get("individual_id")
         keep, best, why = _duplicate_verdict(caught)
         shiny = bool(caught.get("shiny"))
-        name = ("shiny " if shiny else "") + str(caught.get("name", "?"))
+        name = ("shiny " if shiny else "") + str(caught.get("name", "?")) + _letter_of(caught)
         if best is None:
             if shiny and why == "first shiny":
                 _DUP_NOTE[0] = "Shiny! Your first shiny %s." % caught.get("name", "?")
@@ -1147,7 +1172,7 @@ def save_caught_pokemon(
         "captured_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "individual_id": str(uuid.uuid4()),
         "mega": False,
-        "special_form": None,
+        "special_form": getattr(enemy_pokemon, "special_form", None),
         "is_favorite": False,
         "held_item": None,
         "hp": _max_hp,

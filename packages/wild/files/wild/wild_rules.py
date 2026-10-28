@@ -164,6 +164,14 @@ def region():
 def set_region(name):
     if name in REGIONS:
         _settings().set("misc.region", name)
+        # Bank the region you left on its own gym clock right now, so every card
+        # from here on counts for this one - even before the HUD next shows the
+        # gym counter (gym_ui region clocks; each region keeps its own progress)
+        try:
+            from ..gym import gym_ui
+            gym_ui.region_reviews()
+        except Exception:
+            pass
 
 
 def area() -> str:
@@ -1095,6 +1103,24 @@ def _restore_home():
     except Exception as e:
         print("Ankimon wild: could not bring your buddy back:", e)
     _heal(mp)
+
+
+def buddy_iid():
+    """Your adventure buddy - never the team member standing in for it. While a
+    teammate fights in its place (it fainted, or Switch In...), the saved buddy is
+    that teammate until the encounter ends; this is still yours (training points,
+    the team window's Adventure buddy)."""
+    _load_meta()
+    return STATE.home_iid or _iid(_main())
+
+
+def buddy_chosen():
+    """You picked a new buddy mid-fight (team window): it's your buddy from now on,
+    so the one this fight would have brought back is forgotten."""
+    _load_meta()
+    if STATE.home_iid or STATE.switched_in:
+        STATE.home_iid = STATE.switched_in = None
+        _save_meta()
 
 
 def on_new_encounter(pokemon=None):

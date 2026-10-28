@@ -342,7 +342,9 @@ def build_foes(floor) -> List[Combatant]:
 class ExpeditionRun:
     def __init__(self, exp: Expedition, records=None, auto=None):
         self.exp = exp
-        self.team = build_team(records, max((int(m.level) for f in exp.floors for m in f.foes), default=None))
+        # anything above the strongest foe fights at it - once caps apply (3+ badges elsewhere)
+        self.team = build_team(records, max((int(m.level) for f in exp.floors for m in f.foes), default=None)
+                               if GB.caps_on() else None)
         self.auto = CFG.auto_battle() if auto is None else bool(auto)
         self.floor_i = 0
         self.sd = None

@@ -12,7 +12,7 @@
 2. Double-click the downloaded file.
 3. Restart Anki.
 
-It's the same file for everyone, whether you installed everything or only some packages. Ankimon keeps the packages you had, and your Pokémon and progress. In Anki, **Ankimon > Help > Update > Download** gets the same file, in 2.0 too (it downloads the newest version). On the first start after updating, the new badges, item art and battle files are put in place by themselves. Updates come out at most once a day. *Last updated: Oct 26, 2026.*
+It's the same file for everyone, whether you installed everything or only some packages. Ankimon keeps the packages you had, and your Pokémon and progress. In Anki, **Ankimon > Help > Update > Download** gets the same file, in 2.0 too (it downloads the newest version). On the first start after updating, the new badges, item art and battle files are put in place by themselves. Updates come out at most once a day. *Last updated: Oct 28, 2026.*
 
 **If Anki says "Access is denied" while updating** (on Windows, Ankimon 2.0 and the first 2.5 download keep their save file open, and Windows won't let Anki move it): close Anki, start it again while holding **Shift** (add-ons stay off for that session), then Tools > Add-ons > Install from file… and choose the downloaded file. Restart Anki. From this version on, Ankimon closes the file itself, so updating the normal way works.
 
@@ -78,6 +78,7 @@ New players set it during the first-start setup; existing players: Settings > St
   - Enter in the search box only searches.
 - Catch upgrades: catching a better copy of a species you own replaces yours instead of piling up duplicates (**Keep Duplicates** sets how many copies you keep).
 - **Training points:** your buddy earns 2 a day at your card goal; spend them with the + beside a stat to raise it.
+- **Unown letters:** every Unown is one of 28 forms, each its own Pokédex entry.
 - Settings:
   - Short, plain descriptions.
   - Pacing recommendations by daily goal.
@@ -92,7 +93,7 @@ New players set it during the first-start setup; existing players: Settings > St
 - **Paldea:** open world: the 8 gyms in any order ("Where to next?"), levels following the order you take them, then the Elite Four, Geeta and Nemona. Optional Titans; leaders' aces Terastallize, and yours can with a Tera Shard.
 - **Gym Rematches** with each leader's themed loot (TMs of their type, evolution items and more). After each gym interval you choose a rematch or an expedition.
 - **Movesets:** a balanced "Modernized" set by default, or each leader's moves from the original games (setting).
-- **Badges and level locks:** each region has its own badges and its own review count toward its next gym; travelling pauses it. Against a leader, the Elite Four, a Champion, a legendary or an expedition, your Pokémon fight at no higher than the opponent's strongest Pokémon. They keep their real level, lower-level Pokémon fight at their own, and moves they couldn't know at that level are sealed.
+- **Badges and level locks:** each region has its own badges and its own review count toward its next gym; travelling pauses it. Against a leader, the Elite Four, a Champion, a legendary or an expedition, your Pokémon fight at no higher than the opponent's strongest Pokémon. They keep their real level, lower-level Pokémon fight at their own, and moves they couldn't know at that level are sealed. Locks only start once you hold 3 badges in another region, so your first region has none.
 - **Expeditions:** pick three, then three floors of trainers' Pokémon and a legendary; beat it to catch it. Damage carries between floors, and you can use items between them.
   - Kanto: Zapdos, Articuno and Moltres.
   - 45 more across the other regions, from Suicune and Lugia to Zacian, Eternatus and Koraidon, each opening on the original games' conditions. Some are a choice of two; Paldea's shrines need their stakes; Galar's towers evolve Kubfu.
@@ -101,7 +102,7 @@ New players set it during the first-start setup; existing players: Settings > St
 
 ### wild
 - **Smarter moves:** both sides choose moves sensibly (buffs, status, the right attack). Your Pokémon uses only the moves you tick in the Buddy menu.
-- **Levels:** wild levels follow your badges on a bell curve that widens as you earn them. The top 3% are Alphas, and the higher a Pokémon rolls the more likely it's evolved. Until a region's Champion falls, your Pokémon fight wild ones at no higher than the middle of the region's levels.
+- **Levels:** wild levels follow your badges on a bell curve that widens as you earn them. The top 3% are Alphas, and the higher a Pokémon rolls the more likely it's evolved. Until a region's Champion falls, your Pokémon fight wild ones at no higher than the middle of the region's levels (once you hold 3 badges in another region).
 - **Scaled Moves:** a Pokémon above the cap gets a second moveset for that region, with moves it could know at that level (Remember a Scaled Move…). It's filled in for you the first time.
 - **Team rotation:** when your buddy faints, your team steps in against the same wild Pokémon. EXP is split: 50% to the final blow, the rest shared. Changing your team mid-fight makes the wild Pokémon flee.
 - **Travel** (Game > Travel): one region at a time. Only its Pokémon appear, and each region keeps its own gym progress.

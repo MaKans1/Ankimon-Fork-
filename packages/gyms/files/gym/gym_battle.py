@@ -203,10 +203,23 @@ def _capped(level: int, cap=None) -> int:
         return level
 
 
+def caps_on() -> bool:
+    """Level caps / locks apply where you are: 3+ badges in another region
+    (gym_data.caps_apply, user 2026-10-27). Unknown -> the old behaviour (on)."""
+    try:
+        from .gym_ui import progress
+        from .gym_data import caps_apply, current_region
+        return caps_apply(progress().defeated_ids(), current_region())
+    except Exception:
+        return True
+
+
 def boss_level(gym):
     """Gyms, the Elite Four, Champions, wild legendaries and expeditions: your
     Pokémon above the opponent's strongest level fight at it (user 2026-10-22).
-    None if the team is unknown."""
+    None if the team is unknown, or while caps don't apply (caps_on)."""
+    if not caps_on():
+        return None
     try:
         lv = max(int(m.level) for m in (getattr(gym, "team", None) or []))
         return lv if lv > 0 else None

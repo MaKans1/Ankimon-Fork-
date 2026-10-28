@@ -58,12 +58,27 @@ def _try_back(back: bool, id: int, gif: bool, shiny: bool, female: bool):
             return path
 
 
-def get_sprite_path(side: str, sprite_type: str, id: int, shiny: bool, gender: str):
-    """Return the path to the sprite of the Pokémon with robust fallbacks."""
+def get_sprite_path(side: str, sprite_type: str, id: int, shiny: bool, gender: str, form=None):
+    """Return the path to the sprite of the Pokémon with robust fallbacks.
+
+    form: an Unown's letter (functions/unown.py) - its own sprite, else the plain one."""
 
     gif = sprite_type == "gif"
     female = gender == "F"
     back = side == "back"
+
+    if form:
+        try:
+            from .unown import sprite_key
+            key = sprite_key(id, form)
+        except Exception:
+            key = id
+        if key != id:
+            path = _try_back(back, key, gif, shiny, female)
+            if not path and gif:
+                path = _try_back(back, key, False, shiny, female)
+            if path:
+                return path
 
     path = _try_back(back, id, gif, shiny, female)
     if path:

@@ -121,6 +121,14 @@ def PokemonCollectionDetails(
             }
         )
         lang_name = _cap1(get_pokemon_diff_lang_name(int(id), language))
+        # Ankimon 2.6: an Unown's letter - in its name and sprite (functions/unown.py)
+        try:
+            from ..functions.unown import form_by_iid, letter as _unown_letter
+            _unown_form = form_by_iid(individual_id)
+        except Exception:
+            _unown_form = None
+        if _unown_form:
+            lang_name = "%s %s" % (lang_name, _unown_letter(_unown_form))
         lang_desc = get_pokemon_descriptions(int(id), language)
         description = lang_desc
         layout = QVBoxLayout()
@@ -130,7 +138,7 @@ def PokemonCollectionDetails(
         pkmnimage_label = QLabel()
         pkmnpixmap = QPixmap()
         pkmnimage_path = get_sprite_path(
-            "front", "gif" if gif_in_collection else "png", id, shiny, gender
+            "front", "gif" if gif_in_collection else "png", id, shiny, gender, form=_unown_form
         )
 
         if gif_in_collection:

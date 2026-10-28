@@ -2,7 +2,7 @@
 ## 2.6 (October 2026)
 - **Plan ahead:** hover the HUD's gym counter while you review to see who's next, their team and the types to bring. The team picker shows the same three lines (the long notes are gone).
 - **Move cards:** the battle window's move buttons show the move's type colour, category, power and accuracy, and whether it's super effective, not very effective or has no effect on the foe (its Tera type once it Terastallizes).
-- **Level locks** replace the level caps (see Pacing). Moves a Pokémon couldn't know at the level it fights at are sealed: they show greyed as "Sealed · Lv X", and it uses its Scaled Moves (wild package) or moves it could know.
+- **Level locks** replace the level caps (see Pacing), and only apply once you hold 3 badges in another region or have beaten its Champion: your first region has none. Moves a Pokémon couldn't know at the level it fights at are sealed: they show greyed as "Sealed · Lv X", and it uses its Scaled Moves (wild package) or moves it could know.
 - **Double HP** in gym, rematch, expedition and legendary battles, so within a few levels a single hit rarely knocks a Pokémon out.
 - Wild legendaries, totems and Titans are tougher (the Elite Four aren't).
 - **Expeditions:** pick three, like gyms.
@@ -13,6 +13,7 @@
 - The battle summary reads "Your Team vs Wild Mewtwo" with the legendary's own name.
 - The HUD counter says "until you can retry Misty" after a loss and names the Elite Four or the Champion Cup, and sits a little higher above the HP boxes.
 - **Phone reviews count:** after a sync, reviews from your other devices count toward gyms, rematches and expeditions without a restart (EXP and training points come from desktop reviews).
+- Cards reviewed right after travelling count toward the region you arrived in.
 
 
 ## Gym ladders
@@ -32,7 +33,7 @@
 - After a loss, a rematch opens after a set number of cards. "Not now" waits its own, shorter count.
 - The HUD shows the count ("50 / 1200 until Rustboro Gym (Roxanne)"). Once every condition is met it says "Roxanne is ready to battle - next card".
 - All three counts follow your daily card goal; see the recommendations in Settings.
-- **Level locks:** against a leader, the Elite Four, a Champion, a rematch, an expedition or a legendary, your Pokémon fight at no higher than the opponent's strongest Pokémon (the old "next leader's ace + 5" cap is gone). They keep their real level and EXP, and lower-level Pokémon fight at their own level.
+- **Level locks:** against a leader, the Elite Four, a Champion, a rematch, an expedition or a legendary, your Pokémon fight at no higher than the opponent's strongest Pokémon (the old "next leader's ace + 5" cap is gone). They keep their real level and EXP, and lower-level Pokémon fight at their own level. Locks start once you hold 3 badges in another region (or its Champion is beaten); a region whose Champion you've beaten has none.
 
 ## Badges
 - Each region has its own badges. The badge case shows the region you're in, with art for every one: the official badges where the games have them (Kanto to Kalos, Galar), drawn emblems for the rest (Alola, Paldea, Elite Fours and Champions).

@@ -2,7 +2,8 @@
 
 Bug fixes and quality-of-life changes on top of Ankimon 2.03. The core is always installed; the big systems (gyms, wild, showdown) are separate packages.
 ## 2.6 (October 2026)
-- **Training points:** your buddy earns a point for every half of your daily card goal you review (2 a day at your goal). Spend them with the **+** beside a stat in the Pokémon's details to raise it; a maxed stat shows MAX, and a Pokémon with all six maxed shows PERFECT. Points you already had are kept. Friendship no longer gives points (friendship evolutions are unchanged).
+- **Unown letters:** each Unown is one of its 28 forms (A to Z, ! and ?), shown in its name and sprite everywhere. Every letter is its own Pokédex entry, and a catch upgrade only replaces an Unown of the same letter.
+- **Training points:** your buddy earns a point for every half of your daily card goal you review (2 a day at your goal). Only the buddy you chose earns them, not a teammate who steps in after it faints. Spend them with the **+** beside a stat in the Pokémon's details to raise it; a maxed stat shows MAX, and a Pokémon with all six maxed shows PERFECT. Points you already had are kept. Friendship no longer gives points (friendship evolutions are unchanged).
 - **Evolution items:**
   - items the newer games added for older Pokémon now work: Thunder Stone on Magneton and Charjabug, Leaf Stone and Ice Stone on Eevee, Prism Scale on Feebas, Ice Stone on Crabrawler;
   - Oval Stone, Razor Claw and Razor Fang are used from the bag like stones;

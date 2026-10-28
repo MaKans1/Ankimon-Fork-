@@ -294,7 +294,7 @@ class TeamSelectDialog(QDialog):
         for n, rec in enumerate(party):
             tl = PS.type_label(rec.get("type"))
             it = _SortItem("%s   Lv %s%s%s" % (
-                _dn(rec.get("name", "?")), rec.get("level", "?"),
+                _dn(rec.get("name", "?")) + _unown_suffix(rec), rec.get("level", "?"),
                 ("   " + tl) if tl else "", _held_label(rec)))
             it.setData(Qt.ItemDataRole.UserRole, rec)
             it.order = it.order_orig = (n,)
@@ -801,6 +801,15 @@ def _dn(n):
     except Exception:
         s = str(n or "")
         return s[:1].upper() + s[1:]
+
+
+def _unown_suffix(p):
+    """" B" after an Unown's name (functions/unown.py); "" for anything else."""
+    try:
+        from ..functions.unown import suffix
+        return suffix(p)
+    except Exception:
+        return ""
 
 
 # Phone reviews (user 2026-10-26): cards done in AnkiMobile / AnkiDroid reach the

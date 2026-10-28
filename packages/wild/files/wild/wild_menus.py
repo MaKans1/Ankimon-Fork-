@@ -56,7 +56,7 @@ def _tip(msg, colour="#9CCC65"):
 
 def _name(p):
     nick = getattr(p, "nickname", None)
-    base = _dn(getattr(p, "name", "?"))
+    base = _dn(getattr(p, "name", "?")) + _unown_suffix(p)
     if nick and str(nick).lower() != base.lower():
         return "%s (%s)" % (nick, base)
     return base
@@ -505,7 +505,7 @@ class BuddyMenu(QDialog):
             p = mw.ankimon_db.get_pokemon(iid)
             if not p:
                 continue
-            name = _dn(p.get("name", "?"))
+            name = _dn(p.get("name", "?")) + _unown_suffix(p)
             nick = p.get("nickname") or ""
             label = "%s (Lv %s)" % (name, p.get("level", "?"))
             if nick and str(nick).lower() != name.lower():
@@ -539,7 +539,7 @@ class BuddyMenu(QDialog):
             bits = []
             for iid in W.party():
                 p = mw.ankimon_db.get_pokemon(iid) or {}
-                n = str(p.get("nickname") or _dn(p.get("name") or "?"))
+                n = str(p.get("nickname") or _dn(p.get("name") or "?") + _unown_suffix(p))
                 if iid == cur:
                     n = "<b>%s</b>" % n
                 elif iid in W.STATE.fainted:
@@ -590,7 +590,7 @@ class WildInfo(QDialog):
         ep = _S().enemy_pokemon
         star = " ★ shiny" if getattr(ep, "shiny", False) else ""
         v.addWidget(QLabel("<b style='font-size:15px'>Wild %s</b>%s &nbsp; Lv %s"
-                           % (_dn(ep.name), star, ep.level)))
+                           % (_dn(ep.name) + _unown_suffix(ep), star, ep.level)))
         try:
             dex = int(ep.id)
             g = W.gen_of(dex)
@@ -837,3 +837,12 @@ def _dn(n):
     except Exception:
         s = str(n or "")
         return s[:1].upper() + s[1:]
+
+
+def _unown_suffix(p):
+    """" B" after an Unown's name (functions/unown.py); "" for anything else."""
+    try:
+        from ..functions.unown import suffix
+        return suffix(p)
+    except Exception:
+        return ""

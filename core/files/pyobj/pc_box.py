@@ -701,6 +701,7 @@ class PokemonPC(QDialog):
                     pokemon["id"],
                     pokemon.get("shiny", False),
                     pokemon["gender"],
+                    form=pokemon.get("special_form"),
                 )
                 pokemon_button = PokemonSlotButton("")
                 pokemon_button.setFixedSize(self.slot_size, self.slot_size)

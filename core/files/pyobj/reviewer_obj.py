@@ -116,6 +116,11 @@ class Reviewer_Manager:
             hud_html += '<div id="xp_text" class="Ankimon">XP</div>'
 
         enemy_lang_name = (get_pokemon_diff_lang_name(int(self.enemy_pokemon.id), int(self.settings.get('misc.language'))))
+        try:
+            from ..functions.unown import suffix as _unown_sfx
+            enemy_lang_name += _unown_sfx(self.enemy_pokemon)      # Ankimon 2.6: "Unown B"
+        except Exception:
+            pass
         if self.enemy_pokemon.shiny is True:
             enemy_lang_name += " ⭐ "
         name_display_text = f"{enemy_lang_name} LvL: {self.enemy_pokemon.level}"
@@ -170,6 +175,11 @@ class Reviewer_Manager:
             main_lang_name = (get_pokemon_diff_lang_name(int(self.main_pokemon.id), int(self.settings.get('misc.language'))))
             if str(main_lang_name) == 'No translation in this language':
                 main_lang_name = 'RESTART ANKI NOW' 
+            try:
+                from ..functions.unown import suffix as _unown_sfx
+                main_lang_name += _unown_sfx(self.main_pokemon)
+            except Exception:
+                pass
             if self.main_pokemon.shiny:
                 main_lang_name += " ⭐ "
             # Region level cap: the buddy shows (and fights at) the cap until

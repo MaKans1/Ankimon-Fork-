@@ -101,6 +101,14 @@ class Pokedex(QDialog):
         query.addQueryItem("shinies", str_shiny_pokemon_ids)
         query.addQueryItem("mythicals", ",".join(map(str, _myth)))
         query.addQueryItem("region", str(_region))
+        # Ankimon 2.6: the Unown letters you've registered (functions/unown.py)
+        try:
+            from ..functions import unown as _unown
+            _have, _shiny = _unown.registered_letters()
+            query.addQueryItem("unown", ",".join(sorted(_have)))
+            query.addQueryItem("unown_shiny", ",".join(sorted(_shiny)))
+        except Exception as _e:
+            print("Ankimon Pokedex: Unown letters unavailable:", _e)
         url.setQuery(query)
         #print("POKEDEX_DEBUG: Final URL:", url.toString())
 

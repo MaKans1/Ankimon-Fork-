@@ -434,6 +434,23 @@
         ["Galar", 810, 905], ["Paldea", 906, 1025]];
       const mythicals = (qs.get("mythicals") || "").split(",").map(n => parseInt(n, 10)).filter(n => !isNaN(n));
       let currentRegion = parseInt(qs.get("region") || "0", 10);
+      // Ankimon 2.6: every Unown letter is its own entry (A-Z, ! and ?), where Unown was
+      const UNOWN_FORMS = "abcdefghijklmnopqrstuvwxyz".split("").concat(["exclamation", "question"]);
+      const unownHave = (qs.get("unown") || "").split(",").filter(Boolean);
+      const unownShinyHave = (qs.get("unown_shiny") || "").split(",").filter(Boolean);
+      const unownLabel = f => f === "exclamation" ? "!" : f === "question" ? "?" : f.toUpperCase();
+      // A is 201 itself (its sprite is the plain Unown's); B..? are "201-b" ... "201-question"
+      function expandUnown(nums) {
+        const out = [];
+        nums.forEach(n => { if (n === 201) UNOWN_FORMS.forEach(f => out.push(f === "a" ? 201 : "201-" + f)); else out.push(n); });
+        return out;
+      }
+      const unownForm = k => k === 201 ? "a" : (typeof k === "string" ? k.slice(4) : null);
+      function owns(k) {
+        const f = unownForm(k);
+        if (f) return (useShiny ? unownShinyHave : unownHave).includes(f);
+        return (useShiny ? shinyNumbers : caughtNumbers).includes(k);
+      }
       if (!(currentRegion >= 0 && currentRegion < REGIONS.length)) currentRegion = 0;
       const regionsBar = document.getElementById("regions");
       const regionProgress = document.getElementById("region-progress");
@@ -456,7 +473,8 @@
         } else {
           pct = Math.floor(100 * have / Math.max(1, core.length)) + "%";
         }
-        regionProgress.innerHTML = `${name}: ${have} / ${core.length} registered &nbsp;&middot;&nbsp; ${pct}`;
+        regionProgress.innerHTML = `${name}: ${have} / ${core.length} registered &nbsp;&middot;&nbsp; ${pct}` +
+          (pool.includes(201) ? ` &nbsp;&middot;&nbsp; Unown letters: ${unownHave.length} / ${UNOWN_FORMS.length}` : "");
       }
       REGIONS.forEach(([name], idx) => {
         const b = document.createElement("button");
@@ -496,9 +514,8 @@
       }
 
       function getTotalItems() {
-        const pool = regionNumbers();
-        const owned = useShiny ? shinyNumbers : caughtNumbers;
-        const have = pool.filter(n => owned.includes(n)).length;
+        const pool = expandUnown(regionNumbers());
+        const have = pool.filter(owns).length;
         return currentFilter === "all" ? pool.length :
                currentFilter === "caught" ? have : pool.length - have;
       }
@@ -561,12 +578,11 @@
         // In shiny mode, show all Pokémon but use shiny sprites
         // In normal mode, show all Pokémon with normal sprites
         // Only the selected region (All = the National Dex)
-        const pool = regionNumbers();
-        const owned = useShiny ? shinyNumbers : caughtNumbers;
+        const pool = expandUnown(regionNumbers());
         if (currentFilter === "caught") {
-          displayNumbers = pool.filter(number => owned.includes(number));
+          displayNumbers = pool.filter(owns);
         } else if (currentFilter === "not-caught") {
-          displayNumbers = pool.filter(number => !owned.includes(number));
+          displayNumbers = pool.filter(number => !owns(number));
         } else {
           displayNumbers = pool;
         }
@@ -579,7 +595,7 @@
           const pokemonItem = document.createElement("div");
           pokemonItem.className = "Pokémon-item";
 
-          const formattedId = i.toString().padStart(3, '0');
+          const formattedId = unownForm(i) ? "201 " + unownLabel(unownForm(i)) : i.toString().padStart(3, '0');
           const spriteFolder = useGif ? "front_default_gif" : "front_default";
           // In shiny mode, always use shiny sprites; in normal mode, use normal sprites
           const shinyPath = useShiny ? "shiny/" : "";
@@ -588,7 +604,7 @@
           const placeholderShinyPath = useShiny ? `../user_files/sprites/front_default/shiny/0.png` : placeholderPath;
 
           // Check if Pokémon is owned: in shiny mode check shinyNumbers, in normal mode check caughtNumbers
-          const isOwned = useShiny ? shinyNumbers.includes(i) : caughtNumbers.includes(i);
+          const isOwned = owns(i);
           
           if (isOwned) {
             const img = document.createElement("img");
@@ -646,7 +662,7 @@
           const idSpan = document.createElement("span");
           idSpan.className = "Pokémon-id";
           idSpan.textContent = isOwned ?
-            (pokemonNames[i] || `Unknown #${formattedId}`) :
+            ((unownForm(i) ? (pokemonNames[201] || "Unown") + " " + unownLabel(unownForm(i)) : pokemonNames[i]) || `Unknown #${formattedId}`) :
             `#${formattedId}`;
 
           pokemonItem.appendChild(idSpan);

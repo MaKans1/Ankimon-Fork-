@@ -1,4 +1,13 @@
 from ..functions.sprite_functions import get_sprite_path
+
+
+def _unown_sfx(p):
+    """Ankimon 2.6: " B" after an Unown's name (functions/unown.py)."""
+    try:
+        from ..functions.unown import suffix
+        return suffix(p)
+    except Exception:
+        return ""
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QScrollArea, QGroupBox, QFrame, QGridLayout, QComboBox, QDialogButtonBox, QCheckBox, QWidget
 from PyQt6.QtGui import QPixmap
@@ -95,6 +104,11 @@ class PokemonTeamDialog(QDialog):
             self.buddy_iid = (mw.ankimon_db.get_main_pokemon() or {}).get("individual_id")
         except Exception:
             self.buddy_iid = None
+        try:                    # your buddy - not a teammate fighting in its place
+            from ..wild.wild_rules import buddy_iid as _wild_buddy
+            self.buddy_iid = _wild_buddy() or self.buddy_iid
+        except Exception:
+            pass
         self.buddy_changed = False
 
         layout.addWidget(QLabel("Choose Pokémon with XP Share:"))
@@ -156,18 +170,19 @@ class PokemonTeamDialog(QDialog):
     def _search_entry(self, p):
         """One Pokémon as a poke_search entry (sprites cached per look)."""
         from ..functions import poke_search as PS
-        look = (p.get('id'), bool(p.get('shiny')), p.get('gender'))
+        look = (p.get('id'), bool(p.get('shiny')), p.get('gender'), p.get('special_form'))
         pix = self._sprite_cache.get(look)
         if pix is None:
             try:
-                pix = QPixmap(get_sprite_path("front", "png", p['id'], p["shiny"], p["gender"]))
+                pix = QPixmap(get_sprite_path("front", "png", p['id'], p["shiny"], p["gender"],
+                                              form=p.get('special_form')))
             except Exception:
                 pix = None
             self._sprite_cache[look] = pix
         types = PS.parse_types(p.get('type'))
         tl = PS.type_label(types)
         return {"key": p['individual_id'], "data": p['individual_id'],
-                "label": f"{p['name']} (Level {p['level']})" + (f" - {tl}" if tl else ""),
+                "label": f"{p['name']}{_unown_sfx(p)} (Level {p['level']})" + (f" - {tl}" if tl else ""),
                 "name": p.get('name'), "nickname": p.get('nickname') or "",
                 "types": types, "level": p.get('level'), "icon": pix}
 
@@ -429,7 +444,8 @@ class PokemonTeamDialog(QDialog):
             pokemon = combo_box.itemData(index)
             if pokemon:
                 sprite_path = get_sprite_path("front", "png", pokemon['id'],
-                                              pokemon["shiny"], pokemon["gender"])
+                                              pokemon["shiny"], pokemon["gender"],
+                                              form=pokemon.get("special_form"))
                 image_label.setPixmap(QPixmap(sprite_path).scaled(
                     100, 100, Qt.AspectRatioMode.KeepAspectRatio))
                 image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -626,6 +642,11 @@ class PokemonTeamDialog(QDialog):
                            if _buddy_mon else "")
             if _buddy_iid:
                 if mw.ankimon_db.set_main_pokemon(_buddy_iid):
+                    try:        # a new buddy mid-fight is your buddy for good
+                        from ..wild.wild_rules import buddy_chosen
+                        buddy_chosen()
+                    except Exception:
+                        pass
                     from ..functions.update_main_pokemon import update_main_pokemon
                     from ..singletons import main_pokemon as _mp
                     update_main_pokemon(_mp)
