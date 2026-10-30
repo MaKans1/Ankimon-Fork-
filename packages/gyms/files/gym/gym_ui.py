@@ -302,6 +302,17 @@ class TeamSelectDialog(QDialog):
         lay.addWidget(self.list)
         self.search.textChanged.connect(self._filter)
 
+        self.gym = gym
+        pick = QPushButton("Choose team for me")
+        pick.setToolTip("Picks three from your whole PC, with their best moves for this fight "
+                        "(this fight only), and starts the battle.")
+        pick.clicked.connect(self._autopick)
+        lay.addWidget(pick)
+        self.use_tms = QCheckBox("Use my TMs for better moves?")
+        self.use_tms.setToolTip("Lets Choose team for me give a Pokémon a move from a TM you own, "
+                                "for this fight. TMs aren't used up.")
+        lay.addWidget(self.use_tms)
+
         self.auto = QCheckBox("Auto-battle (moves chosen for me)")
         self.auto.setChecked(CFG.auto_battle())
         lay.addWidget(self.auto)
@@ -365,6 +376,24 @@ class TeamSelectDialog(QDialog):
     def _accept(self):
         self.selected = [i.data(Qt.ItemDataRole.UserRole)
                          for i in self.list.selectedItems()]
+        self.accept()
+
+    def _autopick(self):
+        """Choose team for me (autopick.py): three from the whole PC with moves
+        for this fight only, then the fight starts."""
+        from . import autopick
+        try:
+            picked = autopick.choose(self.gym, self.cap, self.use_tms.isChecked(), parent=self)
+        except Exception as e:
+            _log("error", "Choose team for me failed: %s" % e)
+            picked = None
+        if not picked:
+            QMessageBox.information(self, "Choose team for me",
+                                    "Couldn't pick a team for this fight. Choose three yourself.")
+            return
+        from aqt.utils import tooltip
+        tooltip("Picked %s" % ", ".join(_dn(r.get("name", "?")) for r in picked), period=4000)
+        self.selected = picked
         self.accept()
 
     @property
@@ -548,7 +577,8 @@ def start_gym(gym, reuse_selection: bool = False) -> bool:
             from . import dmax as _dm, tera as _tr
             sd.start(player, leader, gym.leader, totem=getattr(gym, "totem", None),
                      dynamax=_dm.config_for(gym), tera=_tr.config_for(gym),
-                     titan=getattr(gym, "titan", None), guard=GB.guard_for(gym), hp_mult=GB.HP_MULT)
+                     titan=getattr(gym, "titan", None), guard=GB.guard_for(gym), hp_mult=GB.HP_MULT,
+                     aiswitch=GB.ai_switch_for(gym))
             _session.engine = sd            # real-game rules for this fight
         except Exception as e:
             _log("warning", "Showdown engine could not start this fight, using classic: %s" % e)
@@ -643,6 +673,27 @@ def progress_html() -> str:
 _menu_added = False
 
 
+def _ankimon_menu(title_key):
+    """An Ankimon submenu found by its title (Debug sits under Other; no import of
+    menu_buttons), or None."""
+    pm = getattr(mw, "pokemenu", None)
+    if pm is None:
+        return None
+    try:
+        title = mw.translator.translate(title_key).replace("&", "")
+    except Exception:
+        return None
+    stack = [pm]
+    while stack:
+        for a in stack.pop().actions():
+            m = a.menu()
+            if m is not None:
+                if a.text().replace("&", "") == title:
+                    return m
+                stack.append(m)
+    return None
+
+
 def ensure_menu():
     """Add a Tools entry so a rematch is reachable on demand.
 
@@ -655,9 +706,11 @@ def ensure_menu():
         return
     try:
         from aqt.qt import QAction
-        act = QAction("Ankimon: Challenge Gym", mw)
+        act = QAction("Challenge Gym", mw)                  # Ankimon > Other > Debug (user 2026-10-28)
+        act.setMenuRole(QAction.MenuRole.NoRole)
         act.triggered.connect(open_gym_manually)
-        mw.form.menuTools.addAction(act)
+        (_ankimon_menu("ankimon_debug_button_title") or _ankimon_menu("ankimon_game_button_title")
+         or mw.form.menuTools).addAction(act)
         _menu_added = True
     except Exception as e:
         _menu_added = True          # never retry-spam on a broken menu API

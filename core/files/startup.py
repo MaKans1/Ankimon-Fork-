@@ -97,6 +97,13 @@ def _check_assets():
         badges_sprites,
     ])
 
+    if database_complete:                       # the sprite pack's oversized back sprites (Diggersby)
+        try:
+            from .functions.sprite_fixes import apply_sprite_fixes
+            apply_sprite_fixes()
+        except Exception:
+            pass
+
     if not database_complete:
         show_agreement_and_download_dialog(force_download=True)
         dialog = CheckFiles()
@@ -136,3 +143,14 @@ def _check_starter():
     db = get_db()
     if db.get_pokemon_count() == 0:
         starter_window.display_starter_pokemon()
+    else:                       # converted from Ankimon: region, goal and catch behaviour, once
+        try:
+            from .pyobj.welcome_window import maybe_show
+            maybe_show()
+        except Exception:
+            pass
+    try:                                        # daily Megas: a starter pick still owed, Mega Rayquaza
+        from .functions import mega as _mega
+        _mega.on_startup()
+    except Exception:
+        pass

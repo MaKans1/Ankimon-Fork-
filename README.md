@@ -1,6 +1,6 @@
-# Ankimon 2.6
+# Ankimon 2.7
 
-## ⬇ [Download Ankimon 2.6](https://github.com/MaKans1/Ankimon-Fork-/releases/latest/download/Ankimon.ankiaddon)
+## ⬇ [Download Ankimon 2.7](https://github.com/MaKans1/Ankimon-Fork-/releases/latest/download/Ankimon.ankiaddon)
 
 **New to Ankimon?** Click the link above, then double-click the downloaded file. Anki installs everything, then restart Anki.
 **Already have Ankimon?** Same file. Your Pokémon, items and progress are kept.
@@ -12,11 +12,11 @@
 2. Double-click the downloaded file.
 3. Restart Anki.
 
-It's the same file for everyone, whether you installed everything or only some packages. Ankimon keeps the packages you had, and your Pokémon and progress. In Anki, **Ankimon > Help > Update > Download** gets the same file, in 2.0 too (it downloads the newest version). On the first start after updating, the new badges, item art and battle files are put in place by themselves. Updates come out at most once a day. *Last updated: Oct 28, 2026.*
+It's the same file for everyone, whether you installed everything or only some packages. Ankimon keeps the packages you had, and your Pokémon and progress. In Anki, **Ankimon > Help > Update > Download** gets the same file, in 2.0 too (it downloads the newest version). On the first start after updating, the new badges, item art and battle files are put in place by themselves. Updates come out at most once a day. *Last updated: Oct 30, 2026.*
 
 **If Anki says "Access is denied" while updating** (on Windows, Ankimon 2.0 and the first 2.5 download keep their save file open, and Windows won't let Anki move it): close Anki, start it again while holding **Shift** (add-ons stay off for that session), then Tools > Add-ons > Install from file… and choose the downloaded file. Restart Anki. From this version on, Ankimon closes the file itself, so updating the normal way works.
 
-A fan-made overhaul of [Ankimon](https://ankiweb.net/shared/info/1908235722), the Anki add-on that turns your reviews into a Pokémon adventure. Ankimon 2.6 adds gym ladders in all nine regions (with Alola's totem trials, Galar's Dynamax and Paldea's open world and Terastallization), travel between regions, smarter wild battles, legendary expeditions, and a progression curve built to last months at your own daily card goal.
+A fan-made overhaul of [Ankimon](https://ankiweb.net/shared/info/1908235722), the Anki add-on that turns your reviews into a Pokémon adventure. Ankimon 2.7 adds gym ladders in all nine regions (with Alola's totem trials, Galar's Dynamax and Paldea's open world and Terastallization), Mega Evolution, switching in gym battles, travel between regions, smarter wild battles, legendary expeditions, and a progression curve built to last months at your own daily card goal.
 
 It's split into a **core** (general patches: fixes and quality-of-life changes) and three optional **packages** for the big systems, so you can install only what you want. Each one has a README and a CHANGELOG:
 [core](core/CHANGELOG.md) · [gyms](packages/gyms/CHANGELOG.md) · [wild](packages/wild/CHANGELOG.md) · [showdown](packages/showdown/CHANGELOG.md)
@@ -46,7 +46,7 @@ Switch packages back on the same way. Updates keep your choice. showdown needs g
 (The core-only file and the package zips are still on the [Releases](../../releases) page for manual installs; to update, use the full file.)
 
 ### Updates
-Anki won't offer to "update" back to the official 2.03 on AnkiWeb, because 2.6 counts as newer. If Ankimon's authors later publish a newer version on AnkiWeb, Anki will offer it, and accepting would replace 2.6 (your save is kept).
+Anki won't offer to "update" back to the official 2.03 on AnkiWeb, because 2.7 counts as newer. If Ankimon's authors later publish a newer version on AnkiWeb, Anki will offer it, and accepting would replace 2.7 (your save is kept).
 
 ## First start
 New players get a short setup:
@@ -79,6 +79,7 @@ New players set it during the first-start setup; existing players: Settings > St
 - Catch upgrades: catching a better copy of a species you own replaces yours instead of piling up duplicates (**Keep Duplicates** sets how many copies you keep).
 - **Training points:** your buddy earns 2 a day at your card goal; spend them with the + beside a stat to raise it.
 - **Unown letters:** every Unown is one of 28 forms, each its own Pokédex entry.
+- **Mega Evolution:** once a day, Mega Evolve one Pokémon for the whole day (the Mega Bracelet and its stone, from Kalos and Hoenn).
 - Settings:
   - Short, plain descriptions.
   - Pacing recommendations by daily goal.
@@ -91,6 +92,8 @@ New players set it during the first-start setup; existing players: Settings > St
 - **Alola:** the full Ultra Sun/Ultra Moon ladder with totem trials (aura, calls for help, a catch and a Z-Crystal), the kahunas, the Elite Four and Hau.
 - **Galar:** the Sword/Shield ladder: 8 gyms (you choose Sword or Shield), the Champion Cup and Leon. Leaders' aces Dynamax, and so can yours once you have the Dynamax Band.
 - **Paldea:** open world: the 8 gyms in any order ("Where to next?"), levels following the order you take them, then the Elite Four, Geeta and Nemona. Optional Titans; leaders' aces Terastallize, and yours can with a Tera Shard.
+- **Switching:** in a battle, ⇄ Switch… shows your bench (HP, types, and which moves hit the foe out now). Switching uses your turn. The Elite Four, Champions and rematched leaders switch too: at most 3 times a battle, and only when it clearly helps.
+- **Choose team for me** in the team picker: three Pokémon from your whole PC, with their best moves for this fight (optionally from your TMs, which are never used up).
 - **Gym Rematches** with each leader's themed loot (TMs of their type, evolution items and more). After each gym interval you choose a rematch or an expedition.
 - **Movesets:** a balanced "Modernized" set by default, or each leader's moves from the original games (setting).
 - **Badges and level locks:** each region has its own badges and its own review count toward its next gym; travelling pauses it. Against a leader, the Elite Four, a Champion, a legendary or an expedition, your Pokémon fight at no higher than the opponent's strongest Pokémon. They keep their real level, lower-level Pokémon fight at their own, and moves they couldn't know at that level are sealed. Locks only start once you hold 3 badges in another region, so your first region has none.
@@ -130,7 +133,13 @@ build.py                       maintainers: python build.py -> dist/release (the
 
 ## Credits and license
 
-- **Ankimon** by Unlucky-Life and h0tp, licensed GPL-3.0. Ankimon 2.6 is a modified version under the same license (see `LICENSE`).
+- **Ankimon** by Unlucky-Life and h0tp, licensed GPL-3.0. Ankimon 2.7 is a modified version under the same license (see `LICENSE`).
 - **Pokémon Showdown** (MIT) by the Smogon team, and **@pkmn/sim** (MIT) by pkmn. Both are downloaded by the setup script, not included here.
 - **Gym rosters** come from the original games, via the pret disassemblies (pokered, pokecrystal, pokeruby) and published references for later generations.
+- **Sprite artists:**
+  - Animated Mega Evolution sprites by [Aronousqui20](https://www.deviantart.com/aronousqui20), used with permission.
+  - Mega Stones by [SelenaEde](https://www.deviantart.com/selenaede/art/Mega-Stone-Base-Set-670820090) (the Legends: Z-A stones and the Dragon Key are recoloured from her set).
+  - Legends: Z-A Mega Stone colours and the Pokémon Item Dex by [MBCMechachu](https://www.deviantart.com/mbcmechachu).
+  - Item Dex sprites by KryptonLion, 3DJackArt, leparagon, tarei-laokia, sphexidecimal, Tinkatooni and Grand-Emperor-Z.
+  - Red and Blue Orbs, Z-Crystals, Tera Shards, the Tera Orb and evolution items by [JorMxDos](https://www.deviantart.com/jormxdos).
 - Pokémon and all related names are trademarks of Nintendo, Creatures Inc. and GAME FREAK inc. This is an unofficial fan project, not affiliated with or endorsed by them or by the Ankimon authors.

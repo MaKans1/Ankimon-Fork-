@@ -311,6 +311,16 @@ USELESS_ITEMS = {
 }
 
 
+def _mega_only(name):
+    """Mega Stones, the Orbs, the Dragon Key and the Mega Bracelet come only from the Mega
+    rewards (functions/mega.py), never the general item pool."""
+    try:
+        from .functions import mega
+        return mega.is_stone(name) or name == mega.BRACELET
+    except Exception:
+        return False
+
+
 def random_item():
     item_names: list[str] = []
 
@@ -339,12 +349,22 @@ def random_item():
             continue
         if name.endswith("-nugget"):
             continue
-        if name.endswith("ium-z") or name == "z-ring" or name in REWARD_ONLY:
+        if name.endswith("ium-z") or name == "z-ring" or name in REWARD_ONLY or _mega_only(name):
             continue                    # trial / gym / Titan rewards, never random drops
         if name.endswith("-tera-shard"):
             continue                    # Tera Shards: Paldea leaders drop the one their ace used
 
         item_names.append(name)
+
+    # --- Mega Stones: rare finds in Kalos and Hoenn once you have the Mega Bracelet
+    try:
+        from .functions import mega as _mega
+        stone = _mega.wild_drop()
+        if stone:
+            give_item(stone)
+            return stone
+    except Exception:
+        pass
 
     # --- TM drops ------------------------------------------------------
     # The Bag_TM_* sprites are all in USELESS_ITEMS, so the pool above can

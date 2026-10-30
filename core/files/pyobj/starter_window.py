@@ -189,7 +189,12 @@ class StarterWindow(QWidget):
             wild_rules.set_region(region)
         except ImportError:
             pass                                # wild package not installed
-        self._ask_daily_goal()
+        try:                                    # goal and catch behaviour in one window
+            from .welcome_window import open_welcome
+            open_welcome(ask_region=False)
+        except Exception as e:
+            self.logger.log("error", "welcome window failed: %s" % e)
+            self._ask_daily_goal()
         try:
             from ..functions.encounter_functions import new_pokemon
             new_pokemon(S.enemy_pokemon, S.test_window, S.ankimon_tracker_obj, S.reviewer_obj)

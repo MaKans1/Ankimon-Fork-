@@ -1,4 +1,7 @@
 # wild: changelog
+## 2.7 (October 2026)
+- **Travel menu:** each region shows its battle mechanic in colour beside its badge count: Mega Evolution and Primal in Hoenn, Mega Evolution in Kalos, Z-Moves in Alola, Dynamax in Galar, Terastal in Paldea.
+
 ## 2.6 (October 2026)
 - **Wild levels on a bell curve:** centred on your badges' level range and widening with each badge, so low and high rolls both happen. The top 3% are Alphas; roaming legendaries and mythicals come from the top 1%.
 - **Evolved Pokémon at the high end:** a Pokémon below the middle of the curve is usually a first stage, above it an evolved one (4 times in 5; the rest is any stage open at that level).

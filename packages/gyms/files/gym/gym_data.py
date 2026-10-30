@@ -313,6 +313,24 @@ for _region, _gyms in LADDERS.items():
         _g.region = _region
 ALL_GYMS: List[Gym] = [g for r in REGION_ORDER for g in LADDERS.get(r, [])]
 
+# Bosses with two Pokemon get a third (user 2026-10-28): gym fights are 3v3, but the
+# original games gave these only two. The third is from the boss's own rematch roster,
+# halfway between the other two in level (moves from its learnset), before the ace.
+THIRD_POKEMON = {1: "Aerodactyl", 2: "Lapras", 201: "Hoothoot", 203: "Teddiursa", 205: "Hitmontop",
+                 301: "Anorith", 302: "Meditite", 307: "Claydol", 501: "Petilil", 502: "Cinccino",
+                 601: "Beedrill", 602: "Carbink", 801: "Flapple", 804: "Sirfetch'd", 811: "Sirfetch'd"}
+
+
+def _fill_small_teams():
+    for g in ALL_GYMS:
+        species = THIRD_POKEMON.get(g.gym_id)
+        team = getattr(g, "team", None)
+        if species and team and len(team) == 2 and all(m.species != species for m in team):
+            team.insert(1, GymMon(species, (int(team[0].level) + int(team[1].level)) // 2))
+
+
+_fill_small_teams()
+
 
 def current_region() -> str:
     try:

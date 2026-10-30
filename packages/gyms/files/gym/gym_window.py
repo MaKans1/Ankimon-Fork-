@@ -33,8 +33,10 @@ from aqt.qt import (
 from .gym_state import GymSession
 from . import gym_battle as GB
 from .move_card import MoveButton, card_info
+from .switch_panel import SwitchPanel
 
-AUTO_TURN_MS = 1100
+AUTO_TURN_MS = 2000      # one auto-battle turn every 2 s (was 1.1 s: fights ended too fast to follow)
+AUTO_FIRST_MS = 3000     # before the first auto turn: time to switch to manual
 
 
 def _mid(move) -> str:
@@ -119,6 +121,15 @@ class GymBattleWindow(QDialog):
             self.move_buttons.append(b)
         root.addWidget(self.moves_box)
 
+        # --- switching (manual mode, Showdown engine): your bench in place of
+        # the moves while "⇄ Switch…" is open (switch_panel.py)
+        self._switching = False
+        self.switch_box = SwitchPanel()
+        self.switch_box.chosen.connect(self._switch_to)
+        self.switch_box.back.connect(lambda: self._show_switch(False))
+        self.switch_box.setVisible(False)
+        root.addWidget(self.switch_box)
+
         foot = QHBoxLayout()
         # Z-Move toggle (Z-Ring + a held Z-Crystal, Showdown engine): the next
         # move you pick becomes its Z-Move. Hidden whenever it can't be used.
@@ -156,6 +167,10 @@ class GymBattleWindow(QDialog):
         self.t_btn.toggled.connect(self._tera_toggled)
         self.t_btn.setVisible(False)
         foot.addWidget(self.t_btn)
+        self.s_btn = QPushButton("⇄ Switch…")
+        self.s_btn.clicked.connect(lambda: self._show_switch(True))
+        self.s_btn.setVisible(False)
+        foot.addWidget(self.s_btn)
         self.mode_btn = QPushButton("")
         self.mode_btn.clicked.connect(self._toggle_mode)
         self.forfeit_btn = QPushButton("Forfeit")
@@ -169,8 +184,16 @@ class GymBattleWindow(QDialog):
         self._timer.setInterval(AUTO_TURN_MS)
         self._timer.timeout.connect(self._auto_tick)
 
+        self._first = QTimer(self)           # owned by the window: dies with it
+        self._first.setSingleShot(True)
+        self._first.timeout.connect(self._auto_start)
+
         self.refresh()
         if self.auto:
+            self._first.start(AUTO_FIRST_MS)
+
+    def _auto_start(self):
+        if self.auto and not self.session.finished and not self._timer.isActive():
             self._timer.start()
 
     # ------------------------------------------------------- isolation ----
@@ -307,7 +330,8 @@ class GymBattleWindow(QDialog):
     def _sync_move_texts(self):
         p = self.session.player_active
         atks = (p.attacks if p else []) or []
-        self.moves_box.setVisible(not self.auto and not self.session.finished)
+        self._sync_switch()
+        self.moves_box.setVisible(not self.auto and not self.session.finished and not self._switching)
 
         # Out of PP on everything: the only option is Struggle, so say so
         # rather than showing four dead buttons.
@@ -423,6 +447,45 @@ class GymBattleWindow(QDialog):
                     b.setVisible(True)
                 else:
                     b.setVisible(False)
+
+    # ------------------------------------------------------------ switching --
+    def _bench(self):
+        """Teammates you could switch to: still standing, not the one out."""
+        cur = self.session.player_active
+        return [c for c in self.session.player_team if c is not cur and c.hp > 0 and not c.fainted]
+
+    def _switch_ok(self) -> bool:
+        """Showdown fights only (the classic engine can't switch), manual mode,
+        not trapped or locked into a move, and someone to switch to."""
+        return bool(getattr(self.session.engine, "can_switch", False) and self._bench()
+                    and not self.auto and not self.session.finished)
+
+    def _sync_switch(self):
+        """The ⇄ Switch… button and, while it's open, the bench in place of the moves."""
+        showdown = getattr(self.session.engine, "can_switch", None) is not None
+        ok = self._switch_ok()
+        self.s_btn.setVisible(showdown and not self.auto and not self.session.finished and bool(self._bench()))
+        self.s_btn.setEnabled(ok)
+        self.s_btn.setToolTip("Send in a teammate instead of attacking - uses your turn." if ok else
+                              "You can't switch right now (trapped, or locked into a move).")
+        if self._switching and not ok:
+            self._switching = False
+        if self._switching:
+            self.switch_box.fill(self._bench(), self.session.leader_active, self._tera().get("foe"))
+        self.switch_box.setVisible(self._switching)
+
+    def _show_switch(self, on):
+        self._switching = bool(on) and self._switch_ok()
+        if self._switching:                     # a switch isn't a move: no Z / Dynamax / Tera with it
+            for b in (self.z_btn, self.d_btn, self.t_btn):
+                b.setChecked(False)
+        self.refresh()
+
+    def _switch_to(self, mon):
+        if not self._switch_ok() or mon not in self._bench():
+            return
+        self._switching = False
+        self._take_turn(None, switch_to=mon)
 
     # ------------------------------------------------------------- turns --
     def _use_move_index(self, n: int):
@@ -575,21 +638,22 @@ class GymBattleWindow(QDialog):
                    z.get("base"), int(z.get("basePower") or 0)))
 
     def _zmoves(self):
-        """{move id: Z-Move name} usable right now (Z-Ring owned), or {}."""
+        """{move id: Z-Move name} usable right now (in Alola, Z-Ring owned), or {}."""
         sd = self.session.engine
         if self.session.finished or not getattr(sd, "zmoves", None) or getattr(sd, "zused", False):
             return {}
         try:
             from . import zmoves
-            test = bool(getattr(self.session.gym, "is_test", False))     # Game > Test: no Ring needed
-            return dict(sd.zmoves) if (zmoves.has_ring() or test) else {}
+            return dict(sd.zmoves) if zmoves.allowed(self.session.gym) else {}     # tests: anywhere
         except Exception:
             return {}
 
-    def _take_turn(self, forced_move: Optional[str], z: bool = False, dmax: bool = False, tera: bool = False):
+    def _take_turn(self, forced_move: Optional[str], z: bool = False, dmax: bool = False, tera: bool = False,
+                   switch_to=None):
         try:
             from . import zmoves
-            zf = zmoves.z_flag(z, self.auto, bool(getattr(self.session.gym, "is_test", False)))
+            zf = (zmoves.z_flag(z, self.auto, bool(getattr(self.session.gym, "is_test", False)))
+                  if zmoves.allowed(self.session.gym) else None)      # Alola only - auto-battle too
         except Exception:
             zf = None
         try:
@@ -602,7 +666,7 @@ class GymBattleWindow(QDialog):
             tf = _tr.tera_flag(tera, self.auto, bool(self._tera().get("allowed")))
         except Exception:
             tf = None
-        events = GB.run_turn(self.session, forced_move=forced_move, z=zf, dmax=df, tera=tf)
+        events = GB.run_turn(self.session, forced_move=forced_move, z=zf, dmax=df, tera=tf, switch_to=switch_to)
         if events:
             # header + effects (boosts, status, screens, faints); cap for space
             self.log.setText("<br>".join(events[:12]))
@@ -641,6 +705,19 @@ class GymBattleWindow(QDialog):
             self.accept()
 
     def keyPressEvent(self, e):
+        if not self.auto and not self.session.finished and self._switching:
+            # bench open: 1, 2... pick a teammate, Esc goes back to the moves
+            # (and doesn't close - closing mid-fight forfeits)
+            k = e.key()
+            if k == Qt.Key.Key_Escape:
+                self._show_switch(False)
+                return
+            bench = self._bench()
+            for i, key in enumerate((Qt.Key.Key_1, Qt.Key.Key_2, Qt.Key.Key_3, Qt.Key.Key_4, Qt.Key.Key_5)):
+                if k == key:
+                    if i < len(bench):
+                        self._switch_to(bench[i])
+                    return
         if not self.auto and not self.session.finished:
             k = e.key()
             for i, key in enumerate((Qt.Key.Key_1, Qt.Key.Key_2,

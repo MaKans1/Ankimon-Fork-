@@ -12,7 +12,7 @@ the webview_did_receive_js_message hook below opens the dialogs.
 from aqt import mw, gui_hooks
 from aqt.qt import (QAction, QActionGroup, QDialog, QVBoxLayout, QHBoxLayout,
                     QGridLayout, QLabel, QPushButton, QCheckBox, QMessageBox,
-                    QTimer, QWidget, QFrame, Qt)
+                    QTimer, QWidget, QFrame, QWidgetAction, QApplication, Qt)
 
 from . import wild_rules as W
 
@@ -748,16 +748,130 @@ def _travel_label(r):
     return "%s   (%s)" % (r, "Champion" if W.is_champion(b, r) else "%d/%d badges" % (b, total))
 
 
+# Travel rows (user 2026-10-28): region, badge count and the region's battle mechanic in
+# its colours - Mega Evolution in Key Stone colours, Primal in Groudon red / Kyogre blue,
+# Z-Moves gold, Dynamax purple, Terastal cyan. A Qt menu item can't colour part of its
+# text, so each region is a small row (QWidgetAction) keeping the tick, the hover
+# highlight and a click to travel.
+REGION_TAGS = {"Hoenn": ("mega", "primal"), "Kalos": ("mega",), "Alola": ("z",), "Galar": ("dmax",),
+               "Paldea": ("tera",), W.AREA_ZERO_NAME: ("tera",)}
+_KEY_STONE = ("#ef4444", "#f59e0b", "#eab308", "#22c55e", "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899")
+_TAG_TEXT = {"mega": "Mega Evol.", "primal": "Primal", "z": "Z-Moves", "dmax": "Dynamax", "tera": "Terastal"}
+_TAG_COLOUR = {"z": "#f4b400", "dmax": "#a855f7", "tera": "#22d3ee"}
+
+
+def _tag_html(tag):
+    if tag == "mega":
+        cols = iter(_KEY_STONE * 2)
+        return "".join(ch if ch == " " else '<span style="color:%s">%s</span>' % (next(cols), ch)
+                       for ch in _TAG_TEXT["mega"])
+    if tag == "primal":
+        return '<span style="color:#ef4444">Pri</span><span style="color:#3b82f6">mal</span>'
+    return '<span style="color:%s">%s</span>' % (_TAG_COLOUR[tag], _TAG_TEXT[tag])
+
+
+def _tags_html(region):
+    tags = REGION_TAGS.get(region, ())
+    if not tags:
+        return '<span style="color:#777777">\u2014</span>'
+    return "&nbsp;&nbsp;&nbsp;".join(_tag_html(t) for t in tags)
+
+
+def _travel_parts(r):
+    """(name, badge text) for a region's row: "5/8 badges", "Champion"."""
+    if r == W.AREA_ZERO_NAME:
+        return r, "inside Paldea"
+    lbl = _travel_label(r)
+    return r, lbl[len(r):].strip().strip("()") if lbl != r else ""
+
+
+def _travel_columns(menu):
+    """Column widths from the menu's font: the tags start as far after the badge counter
+    as "Hoenn" sits before it, centred over the widest set of tags (Hoenn's)."""
+    from aqt.qt import QFontMetrics
+    fm = QFontMetrics(menu.font())
+    w_name = max(fm.horizontalAdvance(r) for r in list(W.REGIONS) + [W.AREA_ZERO_NAME]) + 24
+    w_badge = max(fm.horizontalAdvance(t) for t in ("10/10 badges", "Champion", "inside Paldea")) + 24
+    pad = max(4, (w_name - fm.horizontalAdvance("Hoenn")) // 2)
+    w_tags = fm.horizontalAdvance(_TAG_TEXT["mega"] + "   " + _TAG_TEXT["primal"]) + 4
+    return fm.horizontalAdvance("\u2713") + 10, w_name, w_badge, pad, w_tags
+
+
+class _TravelRow(QWidget):
+    """One Travel row: tick, region, badges and mechanic, in columns that line up."""
+
+    def __init__(self, act, cols):
+        super().__init__()
+        self._act = act
+        self.setObjectName("ankimonTravelRow")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        self.setStyleSheet("#ankimonTravelRow:hover {background: palette(highlight);} "
+                           "QLabel {background: transparent;}")
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(2, 3, 12, 3)
+        lay.setSpacing(0)
+        w_chk, w_name, w_badge, pad, w_tags = cols
+        self.chk, self.name, self.badges, self.tags = QLabel(), QLabel(), QLabel(), QLabel()
+        for lab, w in ((self.chk, w_chk), (self.name, w_name), (self.badges, w_badge)):
+            lab.setFixedWidth(w)
+            lab.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lay.addWidget(lab)
+        self.badges.setStyleSheet("color: #9a9a9a;")
+        self.tags.setTextFormat(Qt.TextFormat.RichText)
+        self.tags.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.tags.setContentsMargins(pad, 0, 0, 0)
+        self.tags.setFixedWidth(pad + w_tags)
+        lay.addWidget(self.tags)
+
+    def show_state(self, region, checked):
+        name, badges = _travel_parts(region)
+        self.chk.setText("\u2713" if checked else "")
+        self.name.setText(name)
+        self.badges.setText(badges)
+        self.tags.setText(_tags_html(region))
+
+    def mouseReleaseEvent(self, e):
+        if self.rect().contains(e.position().toPoint()):
+            while QApplication.activePopupWidget():      # close the whole menu, then travel
+                QApplication.activePopupWidget().close()
+            self._act.trigger()
+
+
+def _region_action(sub, r):
+    act = QWidgetAction(sub)
+    act.setData(r)
+    act.setMenuRole(QAction.MenuRole.NoRole)
+    act.setCheckable(True)
+    act.triggered.connect(lambda _c=False, name=r: travel(name))
+    if getattr(sub, "_ankimon_travel_cols", None) is None:
+        sub._ankimon_travel_cols = _travel_columns(sub)
+    row = _TravelRow(act, sub._ankimon_travel_cols)
+    act.setDefaultWidget(row)
+    act._ankimon_row = row
+    row.show_state(r, False)
+    return act
+
+
+def _plain_region_action(sub, r):
+    act = QAction(r, sub)
+    act.setData(r)
+    act.setMenuRole(QAction.MenuRole.NoRole)
+    act.setCheckable(True)
+    act.triggered.connect(lambda _c=False, name=r: travel(name))
+    return act
+
+
 def _refresh_travel_menu(sub):
     # Area Zero isn't on the map at all until an Area Zero expedition is cleared
     try:
         from ..gym import expedition
         if getattr(sub, "_ankimon_area_zero", None) is None and expedition.unlocked(W.AREA_ZERO):
-            act = QAction(W.AREA_ZERO_NAME, sub)
-            act.setData(W.AREA_ZERO_NAME)
-            act.setMenuRole(QAction.MenuRole.NoRole)
-            act.setCheckable(True)
-            act.triggered.connect(lambda _c=False: travel(W.AREA_ZERO_NAME))
+            try:
+                act = _region_action(sub, W.AREA_ZERO_NAME)
+            except Exception as e:
+                print("Ankimon travel row:", e)
+                act = _plain_region_action(sub, W.AREA_ZERO_NAME)
             sub._ankimon_region_group.addAction(act)
             sub.addAction(act)
             sub._ankimon_area_zero = act
@@ -773,6 +887,9 @@ def _refresh_travel_menu(sub):
         elif r:
             act.setText(_travel_label(r))
             act.setChecked(r == cur and not az)
+        row = getattr(act, "_ankimon_row", None)
+        if row is not None and r:
+            row.show_state(r, act.isChecked())
 
 
 def install(game_menu):
@@ -784,11 +901,11 @@ def install(game_menu):
     group = QActionGroup(sub)
     group.setExclusive(True)
     for r in W.REGIONS:
-        act = QAction(r, sub)
-        act.setData(r)
-        act.setMenuRole(QAction.MenuRole.NoRole)
-        act.setCheckable(True)
-        act.triggered.connect(lambda _c=False, name=r: travel(name))
+        try:
+            act = _region_action(sub, r)            # a coloured row (_TravelRow)
+        except Exception as e:
+            print("Ankimon travel row:", e)
+            act = _plain_region_action(sub, r)
         group.addAction(act)
         sub.addAction(act)
     sub._ankimon_region_group = group          # keep a reference

@@ -17,7 +17,7 @@ DEFAULTS = {
     "gym.leader_smart_moves": True,     # planning leaders; difficulty is tuned for this
     "gym.showdown_engine": True,        # real-game rules via Pokemon Showdown (falls back automatically)
     "gym.original_movesets": False,     # False = Modernized sets, True = exact Red/Blue sets
-    "gym.auto_battle": True,
+    "gym.auto_battle": False,           # manual by default (user 2026-10-28)
     "gym.show_battle_log": True,
     "gym.elite_four_classic": True,
 }

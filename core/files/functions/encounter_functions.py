@@ -1129,7 +1129,10 @@ def save_caught_pokemon(
     enemy_pokemon: PokemonObject,
     nickname: Union[str, None] = None,
     achievements: Union[dict, None] = None,
+    keep_duplicate: bool = False,
 ):
+    # keep_duplicate: a gift (the Mega starter pick) - always kept as a new Pokémon, never
+    # released or swapped in for one you own by the duplicate rules
     # Create a dictionary to store the Pokémon's data
     # add all new values like hp as max_hp, evolution_data, description and growth rate
     if enemy_pokemon.tier is not None and achievements is not None:
@@ -1182,13 +1185,20 @@ def save_caught_pokemon(
     caught_pokemon["cp"] = calculate_cp_from_dict(caught_pokemon)
 
     # Resolve against any copy already owned: upgrade in place, or discard.
-    _target = resolve_duplicate_catch(caught_pokemon, mw.logger if hasattr(mw, "logger") else None)
+    _target = (caught_pokemon.get("individual_id") if keep_duplicate
+               else resolve_duplicate_catch(caught_pokemon, mw.logger if hasattr(mw, "logger") else None))
     if _target is None:
         return
     caught_pokemon["individual_id"] = _target
 
     # Save to database (replaces JSON file I/O for performance)
     ankimon_db.save_pokemon(caught_pokemon)
+    if int(caught_pokemon.get("id") or 0) == 384:      # a Rayquaza: Mega Rayquaza may be waiting
+        try:
+            from . import mega as _mega
+            _mega.check_rayquaza_later()
+        except Exception:
+            pass
 
     # If that replaced your buddy, reload the live buddy object. Otherwise the
     # old copy in memory is saved back over the upgrade after the next battle.

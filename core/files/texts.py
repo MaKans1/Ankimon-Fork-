@@ -6,7 +6,7 @@ _bottomHTML_template = """
         <button title="%(editkey)s" onclick="pycmd('edit');">%(edit)s</button></td>
         <td align=center valign=top id=middle>
         </td>
-        <td align=center valign=top class=stat>
+        <td align=center valign=top class=stat id=ankimon_buttons style="%(ButtonsStyle)s">
         <button title="%(DefeatKey)s" onclick="pycmd('defeat');">Defeat Pokemon</button>
         <button title="%(CatchKey)s" onclick="pycmd('catch');">Catch Pokemon</button>
         </td>

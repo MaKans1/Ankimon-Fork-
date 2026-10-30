@@ -150,8 +150,12 @@ def simulate_battle_with_poke_engine(
         try:
             from ..wild import wild_rules as _wild_cap
             _wild_cap.cap_engine(main_pokemon_poke_engine, main_pokemon)
-        except Exception:
-            pass
+        except Exception:                       # no wild package: today's Mega still fights as one
+            try:
+                from . import mega as _mega
+                _mega.engine(main_pokemon_poke_engine, main_pokemon)
+            except Exception:
+                pass
         enemy_pokemon_poke_engine = enemy_pokemon.to_poke_engine_Pokemon()
 
         # Default side_conditions with all needed keys

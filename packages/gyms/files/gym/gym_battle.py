@@ -113,6 +113,40 @@ def build_leader_pokemon(mon) -> Optional[PokemonObject]:
         return None
 
 
+# Kalos/Hoenn rematches once that region's Elite Four is beaten: the leader has a Mega of
+# its own (functions/mega.py, user 2026-10-28). These leaders' rosters have no Pokemon that
+# can Mega Evolve (Brawly's and Ramos's only in their early versions), so a type-matched one
+# leads instead.
+LEADER_MEGA_FALLBACK = {301: "Aerodactyl", 302: "Medicham", 303: "Manectric", 304: "Camerupt",
+                        305: "Kangaskhan", 307: "Alakazam", 308: "Gyarados", 602: "Aerodactyl",
+                        604: "Victreebel", 605: "Ampharos", 607: "Alakazam"}
+
+
+def _leader_mega(gym, out):
+    region = str(getattr(gym, "region", "") or "")
+    if not (out and getattr(gym, "is_rematch", False) and region in ("Kalos", "Hoenn")):
+        return
+    from . import gym_data
+    from .gym_ui import progress
+    from ..functions import mega as _mega
+    elite = [g.gym_id for g in gym_data.ladder(region) if g.kind == gym_data.ELITE4]
+    if not elite or not set(elite) <= set(progress().defeated_ids()):
+        return
+    forms = {st["species"]: st["form"] for item, st in _mega.stones().items() if item != _mega.DRAGON_KEY}
+    pick = next((c for c in reversed(out) if c.species_id in forms), None)
+    if pick is None:
+        name = LEADER_MEGA_FALLBACK.get(int(getattr(gym, "gym_id", 0) or 0))
+        p = build_leader_pokemon(gym_data.GymMon(name, int(out[-1].level))) if name else None
+        if p is None or int(p.id) not in forms:
+            return
+        pp = build_pp(p.attacks)
+        out[0] = Combatant(name=p.name, level=p.level, max_hp=int(p.max_hp), hp=int(p.max_hp),
+                           attacks=list(p.attacks), species_id=p.id, is_player=False, source=p,
+                           pp=dict(pp), max_pp=dict(pp))
+        pick = out[0]
+    pick.mega_form = pick.source.mega_form = forms[pick.species_id]   # gym_showdown gives it the stone
+
+
 def build_leader_team(gym) -> List[Combatant]:
     out = []
     for mon in gym.team:
@@ -130,6 +164,10 @@ def build_leader_team(gym) -> List[Combatant]:
         out[-1].gigantamax = True                   # Galar: the ace Gigantamaxes (gym_showdown passes it)
     if getattr(gym, "tera_rolled", "") and out:
         out[-1].tera_type = gym.tera_rolled         # Paldea: the ace's Tera type, rolled for this fight
+    try:
+        _leader_mega(gym, out)
+    except Exception as e:
+        _log("warning", "leader Mega failed: %s" % e)
     return out
 
 
@@ -175,7 +213,7 @@ def _obj_from_saved(rec, cap=None) -> Optional[PokemonObject]:
                 try:                # scaling in effect in this region: its scaled moveset
                     from ..wild import wild_rules as _w
                     wcap = _w.level_cap()
-                    if wcap and real > wcap:
+                    if wcap and real > wcap and not rec.get("_picked_moves"):   # autopick chose for this level
                         moves = move_seal.scaled_moves(rec, _w.region(), wcap)[0]
                 except ImportError:
                     pass
@@ -351,6 +389,22 @@ def guard_for(gym):
     return None
 
 
+# Leaders who switch (user 2026-10-27): the Elite Four, Champions and every
+# rematch, at most 3 times a battle with at least 5 of their moves between two,
+# and only when it's clearly their best play (gymsim.js aiSwitch). Gym leaders
+# the first time round, totems, Titans, legendaries and expeditions never do.
+AI_SWITCH = {"max": 3, "gap": 5}
+
+
+def ai_switch_for(gym):
+    """The leader's switching rules for this fight, or None (never switches)."""
+    if getattr(gym, "is_legend", False) or getattr(gym, "totem", None) or getattr(gym, "titan", None):
+        return None
+    if getattr(gym, "is_rematch", False) or getattr(gym, "is_elite", False):
+        return dict(AI_SWITCH)
+    return None
+
+
 def _engine(session: GymSession):
     """The fight's single engine State, built on the first turn."""
     if session.engine is None:
@@ -362,17 +416,20 @@ def _engine(session: GymSession):
     return session.engine
 
 
-def run_turn(session: GymSession, forced_move: Optional[str] = None, z=None, dmax=None, tera=None):
+def run_turn(session: GymSession, forced_move: Optional[str] = None, z=None, dmax=None, tera=None,
+             switch_to=None):
     """Resolve one gym turn. Returns a list of battle-log lines.
 
     forced_move: the move the player chose in the gym window (manual mode).
     None means auto-battle: we press the move with the highest expected damage
     right now (type matchups, stats and boosts included).
+    switch_to: a teammate (Combatant) to switch to instead - uses the turn.
+    Showdown engine only; the classic engine has no switching.
     """
     if session.finished:
         return []
     if isinstance(session.engine, GS.ShowdownBattle):
-        return _showdown_turn(session, session.engine, forced_move, z, dmax, tera)
+        return _showdown_turn(session, session.engine, forced_move, z, dmax, tera, switch_to)
     try:
         eng = _engine(session)
     except Exception as e:
@@ -418,7 +475,7 @@ def run_turn(session: GymSession, forced_move: Optional[str] = None, z=None, dma
     return [header] + session.record_turn(lines)
 
 
-def _showdown_turn(session: GymSession, sd, forced_move, z=None, dmax=None, tera=None):
+def _showdown_turn(session: GymSession, sd, forced_move, z=None, dmax=None, tera=None, switch_to=None):
     """One turn on Pokémon Showdown's simulator. Showdown owns HP, status, PP,
     locked moves (Petal Dance, Outrage...) and faint replacement; the log it
     returns is already readable ("Your Growlithe used Flame Wheel!")."""
@@ -426,13 +483,15 @@ def _showdown_turn(session: GymSession, sd, forced_move, z=None, dmax=None, tera
     if p is None or session.leader_active is None:
         return []
     move = forced_move if (forced_move and p.pp_left(forced_move) > 0) else None
+    if switch_to is not None:
+        move = None
     try:
         from .gym_config import leader_smart_moves
         smart = leader_smart_moves()
     except Exception:
         smart = True
     try:
-        lines = sd.play_turn(move, smart=smart, z=z, dmax=dmax, tera=tera)
+        lines = sd.play_turn(move, smart=smart, z=z, dmax=dmax, tera=tera, switch_to=switch_to)
     except Exception as e:
         _log("error", "Showdown engine failed; continuing this fight on the classic engine: %s" % e)
         session.engine = _classic_from_current(session, sd)
@@ -563,7 +622,8 @@ def award_victory(session: GymSession):
                     from ..utils import give_item
                     give_item(zmoves.Z_RING)
                     notes.append("You received the %s! A Pokémon holding a Z-Crystal can now "
-                                 "use its Z-Move once per gym battle (Give to hold, in the bag)."
+                                 "use its Z-Move once per battle in Alola's gyms and battles "
+                                 "(Give to hold, in the bag)."
                                  % zspan("Z-Ring"))
             except Exception as e:
                 _log("warning", "Z-Ring failed: %s" % e)
@@ -612,6 +672,17 @@ def award_victory(session: GymSession):
             except Exception as e:
                 _log("warning", "Herba Mystica failed: %s" % e)
 
+    # Daily Megas (functions/mega.py): the Mega Bracelet + a starter pick (Korrina / Norman,
+    # or the next gym there), Kalos/Hoenn rematch stones after the Elite Four, Champion stones.
+    try:
+        from .gym_ui import progress
+        from ..functions import mega as _mega
+        m_notes, m_loot = _mega.gym_rewards(gym, progress().defeated_ids())
+        notes.extend(m_notes)
+        z_loot.extend(m_loot)
+    except Exception as e:
+        _log("warning", "Mega rewards failed: %s" % e)
+
     # Boss loot: from this leader's themed pool (gym/rewards.py: type TMs,
     # power item, stone, healing); the normal item pool only if there's none.
     got = []
@@ -644,6 +715,24 @@ def _item_label(name) -> str:
 
 def finish_session(session: GymSession, progress: GymProgress, review_count: int):
     """Close out a gym. Leaving discards the damaged copies, which is the heal."""
+    notes = _finish_session(session, progress, review_count)
+    _log_fight(session)
+    return notes
+
+
+def _log_fight(session):
+    """The fight's turn-by-turn log in app.log, after its summary line (user 2026-10-29:
+    the battle window was the only copy, so a report about a fight couldn't be checked)."""
+    try:
+        team = lambda cs: ", ".join("%s Lv %s" % (c.name, getattr(c, "level", "?")) for c in cs)
+        _log("info", "\n".join(["fight log - you: %s | %s: %s" % (
+            team(session.player_team), session.gym.leader, team(session.leader_team))]
+            + ["    %s" % line for line in (session.events or [])]))
+    except Exception:
+        pass
+
+
+def _finish_session(session: GymSession, progress: GymProgress, review_count: int):
     if getattr(session.gym, "is_legend", False):
         # roaming legendaries / mythicals (legends.py): catch or flee, no progress
         from . import legends

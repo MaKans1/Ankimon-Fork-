@@ -39,7 +39,7 @@ DEFAULT_CONFIG = {
     "gym.leader_smart_moves": True,
     "gym.showdown_engine": True,
     "gym.original_movesets": False,
-    "gym.auto_battle": True,
+    "gym.auto_battle": False,
     "gym.show_battle_log": True,
     "battle.automatic_battle": 3,
     "battle.cards_per_round": 2,
@@ -106,6 +106,9 @@ DEFAULT_CONFIG = {
     "trainer.level": 0,
     "trainer.xp": 0,
 }
+
+# called after every save (reviewer_ui shows/hides the Catch/Defeat buttons)
+SAVE_HOOKS = []
 
 
 class Settings:
@@ -232,6 +235,11 @@ class Settings:
 
         self.config = config
         self.compute_gui_config()
+        for hook in SAVE_HOOKS:
+            try:
+                hook()
+            except Exception as e:
+                print(f"Ankimon: settings save hook failed: {e}")
 
     def get(self, key, default=None):
         return self.config.get(key, default)

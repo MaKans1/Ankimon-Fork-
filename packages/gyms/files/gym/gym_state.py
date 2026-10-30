@@ -196,7 +196,7 @@ class GymSession:
         elif self.player_remaining() == 0:
             self.status = self.LOST
             out.append("You are out of Pokémon. You lose.")
-        self.events.extend(out)
+        self.events.extend(["-- turn %d --" % self.turns] + out)
         return out
 
     @property

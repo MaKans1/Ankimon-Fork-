@@ -267,6 +267,16 @@ def create_menu_actions(
     starter_action.triggered.connect(_choose_starter_debug)
     help_menu.addAction(starter_action)
 
+    # Ankimon 2.6: the welcome window (region, daily goal, catch behaviour) by hand
+    def _welcome_debug():
+        from .pyobj.welcome_window import open_welcome
+        open_welcome()
+
+    welcome_action = QAction("Welcome to Ankimon (debug)", mw)
+    welcome_action.setMenuRole(QAction.MenuRole.NoRole)
+    welcome_action.triggered.connect(_welcome_debug)
+    help_menu.addAction(welcome_action)
+
     # Version
     version_action = QAction(mw.translator.translate("ankimon_version_button"), mw)
     version_action.setMenuRole(QAction.MenuRole.NoRole)

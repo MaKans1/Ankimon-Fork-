@@ -9,3 +9,4 @@
 - Fixed a crash in the damage estimate with Torrent, Blaze and Overgrow.
 - **One-click setup from inside Anki:** the first gym battle offers to download the engine (Node.js plus @pkmn/sim, about 40 MB, checksum-verified) in the background. Works on Windows, macOS and Linux. No Python, npm or command line needed.
 - **Fallback:** if the runtime is missing or fails to start, battles use Ankimon's built-in engine automatically.
+- **Switching and Mega Evolution** (2.7) run here too: your switches, the Elite Four's, Champions' and rematched leaders' look-ahead switches, and today's Mega Evolving with its first move.

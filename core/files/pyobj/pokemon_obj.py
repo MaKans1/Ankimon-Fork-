@@ -294,6 +294,13 @@ class PokemonObject:
         return hp
 
     def get_sprite_path(self, side, sprite_type):
+        try:                                    # today's Mega looks like one (functions/mega.py)
+            from ..functions import mega as _mega
+            p = _mega.sprite_path(self, side, sprite_type)
+            if p:
+                return p
+        except Exception:
+            pass
         return get_sprite_path(side, sprite_type, self.id, self.shiny, self.gender,
                                form=getattr(self, "special_form", None))
 

@@ -124,6 +124,11 @@ class ItemWindow(QWidget):
 
         self.evolution_items = set()
         self.load_evolution_items()
+        try:                                    # Mega Stones, the Orbs and the Dragon Key sit with them
+            from ..functions import mega
+            self.evolution_items.update(mega.stones())
+        except Exception:
+            pass
 
         self.setWindowIcon(QIcon(str(icon_path)))  # Add a Pokeball icon
         self.setWindowTitle("Itembag")
@@ -349,6 +354,13 @@ class ItemWindow(QWidget):
                 tip = ""
             return (tip + "<br><br>" if tip else "") + (
                 "Teach this move to a Pokémon that can learn it. TMs are not used up.")
+        try:                                    # Mega items (functions/mega.py)
+            from ..functions import mega as _mega
+            t = _mega.tooltip(item_name)
+            if t:
+                return t
+        except Exception:
+            pass
         try:
             from ..utils import get_item_description
             d = get_item_description(item_name, self.settings_obj.get("misc.language"))
@@ -448,6 +460,12 @@ class ItemWindow(QWidget):
             fossil_name = search_pokedex_by_id(fossil_id)
             return [self._action_button("Revive %s" % _pname(fossil_name),
                                         fn=lambda: self.Evolve_Fossil(item, fossil_id, fossil_name))]
+        if self._is_mega(item):
+            return [self._mega_action(item)]
+        if item == "mega-bracelet":
+            return [self._action_button("Key item", False,
+                                        "Lets one Pokémon a day Mega Evolve: use its Mega Stone. "
+                                        "Nothing to equip.")]
         if item in self.evolution_items:
             eligible = self._evo_candidates(item)
             any_ok = any(e["enabled"] for e in eligible)
@@ -722,6 +740,66 @@ class ItemWindow(QWidget):
                                                        _pname(search_pokedex_by_id(evo))),
                         "enabled": ok, "reason": why})
         return out
+
+    # --- Mega Evolution (functions/mega.py) --------------------------------
+    @staticmethod
+    def _is_mega(item):
+        try:
+            from ..functions import mega
+            return mega.is_stone(item)
+        except Exception:
+            return False
+
+    def _mega_candidates(self, item):
+        from ..functions import mega
+        st = mega.stones()[item]
+        try:
+            rows = mw.ankimon_db.get_all_pokemon() or []
+        except Exception:
+            rows = []
+        out = []
+        for rec in rows:
+            if not rec or int(rec.get("id") or 0) != st["species"]:
+                continue
+            why = mega.why_not(rec, item)
+            out.append({"key": rec.get("individual_id"), "rec": rec,
+                        "label": "%s  Lv %d  →  %s" % (rec.get("nickname") or _pname(rec.get("name")),
+                                                       int(rec.get("level") or 1), mega.display_name(st["form"])),
+                        "enabled": not why, "reason": why})
+        return out
+
+    def _mega_action(self, item):
+        from ..functions import mega
+        if not mega.has_bracelet():
+            return self._action_button("Mega Evolve…", False, "You need the Mega Bracelet.")
+        st = mega.today()
+        if st:
+            return self._action_button("Mega Evolve…", False,
+                                       "%s is today's Mega. One Mega a day: the next after Anki's day change."
+                                       % mega.display_name(st.get("form")))
+        entries = self._mega_candidates(item)
+        why = "" if any(e["enabled"] for e in entries) else (
+            entries[0]["reason"] if entries else "None of your Pokémon can use this.")
+        return self._action_button("Mega Evolve…", not why, why, lambda: self._mega_evolve(item))
+
+    def _mega_evolve(self, item):
+        from aqt.qt import QMessageBox
+        from ..functions import mega
+        entries = self._mega_candidates(item)
+        iid = self._pick("Use %s" % item.replace("-", " ").title(), entries, "Mega Evolve which Pokémon?")
+        if not iid:
+            return
+        rec = next(e["rec"] for e in entries if e["key"] == iid)
+        who = rec.get("nickname") or _pname(rec.get("name"))
+        ask = QMessageBox.question(self, "Mega Evolution",
+                                   "%s will be %s until Anki's next day change.\n\nOnly one Pokémon can "
+                                   "Mega Evolve per day. Go ahead?"
+                                   % (who, mega.display_name(mega.stones()[item]["form"])))
+        if ask != QMessageBox.StandardButton.Yes:
+            return
+        done, msg = mega.evolve(rec, item)
+        self.logger.log_and_showinfo("info" if done else "warning", msg)
+        self.renewWidgets()
 
     def _prompt_and_check_evo_item(self, item_name: str):
         entries = self._evo_candidates(item_name)

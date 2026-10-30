@@ -407,6 +407,11 @@ class DownloadDialog(QDialog):
         self.status_label.setText(message)
         self.cancel_button.setEnabled(False)
         if success:
+            try:                                # Ankimon's added / corrected sprites (Megas, item
+                from ..functions.sprite_fixes import apply_sprite_fixes     # icons, Diggersby):
+                apply_sprite_fixes()                                       # else next start
+            except Exception:
+                pass
             self.start_button.setText("Download Complete!")
             self.start_button.setEnabled(False)
             self.progress_bar.setValue(100)

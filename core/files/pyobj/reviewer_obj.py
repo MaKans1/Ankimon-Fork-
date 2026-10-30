@@ -180,6 +180,14 @@ class Reviewer_Manager:
                 main_lang_name += _unown_sfx(self.main_pokemon)
             except Exception:
                 pass
+            try:                                # today's Mega: "Mega Charizard X"
+                from ..functions import mega as _mega
+                _mf = _mega.form_for(getattr(self.main_pokemon, "individual_id", None),
+                                     getattr(self.main_pokemon, "id", None))
+                if _mf:
+                    main_lang_name = _mega.display_name(_mf)
+            except Exception:
+                pass
             if self.main_pokemon.shiny:
                 main_lang_name += " ⭐ "
             # Region level cap: the buddy shows (and fights at) the cap until

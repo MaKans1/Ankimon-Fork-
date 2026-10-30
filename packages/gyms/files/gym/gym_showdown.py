@@ -64,7 +64,26 @@ def _set_from(c):
         "gigantamax": bool(getattr(c, "gigantamax", False)),
         **_tera_fields(c),
         **_carry(c),
+        **_mega_fields(c),
     }
+
+
+def _mega_fields(c):
+    """Daily Megas (functions/mega.py): today's Mega - or a rematched leader's (c.mega_form) -
+    holds its Mega Stone and Mega Evolves with its first move (gymsim.js megaChoice)."""
+    try:
+        from ..functions import mega
+        form = getattr(c, "mega_form", None) or mega.form_for(getattr(c.source, "individual_id", None),
+                                                               getattr(c.source, "id", None))
+        if not form:
+            return {}
+        item = mega.item_for(form)
+        out = {"item": to_id(item), "mega": True} if item else ({"mega": True} if form == "rayquazamega" else {})
+        if out and form == "floettemega":       # Showdown's Floettite only works for AZ's Floette
+            out["species"] = "Floette-Eternal"
+        return out
+    except Exception:
+        return {}
 
 
 def _tera_fields(c):
@@ -184,25 +203,31 @@ class ShowdownBattle:
 
     # --- battle ------------------------------------------------------------
     def start(self, player_team, leader_team, leader_label="The leader", wild=False, totem=None, dynamax=None,
-              tera=None, titan=None, guard=None, hp_mult=1.0):
+              tera=None, titan=None, guard=None, hp_mult=1.0, aiswitch=None):
         """totem: {"aura": {...}} for an Alola totem trial (gymsim.js totem rules).
         dynamax: {"p1": bool, "p2": bool} - who may Dynamax (Galar; dmax.config_for).
-        tera: {"p1": bool, "p2": bool} - who may Terastallize (Paldea; tera.config_for)."""
+        tera: {"p1": bool, "p2": bool} - who may Terastallize (Paldea; tera.config_for).
+        aiswitch: {"max": 3, "gap": 5} - the leader may switch (gym_battle.ai_switch_for)."""
         self.p_team, self.l_team = list(player_team), list(leader_team)
         self.hp_mult = float(hp_mult or 1.0)       # battle HP; Combatants keep real HP
         r = self._ask({"cmd": "start", "hpmult": self.hp_mult, "p1": [_set_from(c) for c in self.p_team],
                        "p2": [_set_from(c) for c in self.l_team], "leader": leader_label,
                        "wild": bool(wild), "totem": totem or None, "dynamax": dynamax or None,
                        "tera": tera or None, "titan": titan or None,
-                       "guard": {"mult": float(guard)} if guard else None})
+                       "guard": {"mult": float(guard)} if guard else None,
+                       "aiswitch": aiswitch or None})
         self._apply(r)
         return r.get("log") or []
 
-    def play_turn(self, move=None, smart=True, z=None, dmax=None, tera=None):
+    def play_turn(self, move=None, smart=True, z=None, dmax=None, tera=None, switch_to=None):
         """move: the display name the player clicked, or None for auto.
-        z: True = that move as its Z-Move; "auto" = auto-battle may spend it."""
+        z: True = that move as its Z-Move; "auto" = auto-battle may spend it.
+        switch_to: a Combatant from your team - switch to it instead (uses the turn)."""
+        k = None
+        if switch_to is not None and switch_to in self.p_team:
+            k = self.p_team.index(switch_to)
         r = self._ask({"cmd": "turn", "move": to_id(move) if move else None, "smart": bool(smart),
-                       "z": z, "dmax": dmax, "tera": tera})
+                       "z": z, "dmax": dmax, "tera": tera, "switchto": k})
         self._apply(r)
         lines = list(r.get("log") or [])
         if self.fled:
@@ -240,6 +265,8 @@ class ShowdownBattle:
         # Tera: {allowed, can (your Tera type), active (type), used, foe (type)}
         self.tera = r.get("tera") or {}
         self.zused = bool(r.get("zused"))
+        # you may switch now (a teammate standing, not trapped / locked into a move)
+        self.can_switch = bool(r.get("canswitch"))
         a = self.active("user")
         if a is not None and self.moves and [to_id(n) for n in a.attacks] != [m["id"] for m in self.moves]:
             # a move slot changed mid-battle (Tera Blast): follow it, keep the PP

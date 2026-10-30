@@ -411,11 +411,28 @@ def level_cap(reg=None):
         return None
 
 
+def mega_level(pobj):
+    """The level today's Mega fights at here: above the curve's middle, below the
+    Alphas (functions/mega.wild_level); its own level when no cap applies."""
+    lv = int(pobj.level)
+    d = level_dist() if level_cap() else None
+    if not d:
+        return lv
+    from ..functions import mega as _mega
+    return _mega.wild_level(lv, d[0], d[1], ALPHA_Z)
+
+
 def cap_engine(engine_mon, pobj):
     """Fight at the region's level cap: the engine copy gets its stats at the
     cap and its HP rescaled into the capped pool. The Pokémon itself keeps
     its real level and HP (real_hp converts back after each turn)."""
     try:
+        try:                                    # today's Mega: its own stats, at the Mega level
+            from ..functions import mega as _mega
+            if _mega.form_for(getattr(pobj, "individual_id", None), getattr(pobj, "id", None)):
+                return _mega.engine(engine_mon, pobj, mega_level(pobj))
+        except Exception as e:
+            print("Ankimon wild: Mega not applied:", e)
         cap = level_cap()
         if not cap or int(pobj.level) <= cap:
             return engine_mon
@@ -447,6 +464,20 @@ def shown_level_hp(pobj):
         lv, hp, mx = int(pobj.level), int(pobj.hp), max(1, int(pobj.max_hp))
     except Exception:
         return getattr(pobj, "level", 1), getattr(pobj, "hp", 0), getattr(pobj, "max_hp", 1)
+    try:                                        # today's Mega shows its Mega level and HP
+        from ..functions import mega as _mega
+        mf = _mega.form_for(getattr(pobj, "individual_id", None), getattr(pobj, "id", None))
+        if mf:
+            mlv = mega_level(pobj)
+            if mlv == lv:
+                return lv, hp, mx
+            bs = _mega.form_data(mf).get("baseStats") or {}
+            iv, ev = pobj.iv or {}, pobj.ev or {}
+            cmx = max(1, type(pobj).calc_stat("hp", int(bs.get("hp", 50)), mlv, int(iv.get("hp", 0)),
+                                              int(ev.get("hp", 0)), getattr(pobj, "nature", "serious")))
+            return mlv, (0 if hp <= 0 else (cmx if hp >= mx else max(1, round(hp * cmx / mx)))), cmx
+    except Exception:
+        pass
     try:
         cap = level_cap()
         if not cap or lv <= cap:

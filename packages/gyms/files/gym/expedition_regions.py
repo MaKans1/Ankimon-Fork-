@@ -279,7 +279,7 @@ REGION_EXPEDITIONS = [
                 GymMon('Altaria', 56, ['Moonblast', 'Dragon Breath', 'Take Down', 'Cotton Guard'])],
                cash=500),
          Floor('Rayquaza',
-               [GymMon('Rayquaza', 61, ['Dragon Ascent', 'Dragon Pulse', 'Dragon Dance', 'Rest'])],
+               [GymMon('Rayquaza', 61, ['Extreme Speed', 'Dragon Pulse', 'Dragon Dance', 'Rest'])],
                cash=0, boss=True)],
         region='Hoenn', needs_any=(382, 383), needs_champion=True),
     Expedition(

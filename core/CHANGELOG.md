@@ -1,6 +1,16 @@
 # Core: general patches (changelog)
 
 Bug fixes and quality-of-life changes on top of Ankimon 2.03. The core is always installed; the big systems (gyms, wild, showdown) are separate packages.
+## 2.7 (October 2026)
+- **Mega Evolution, once a day:** with the Mega Bracelet, use a Mega Stone from the bag (Evolution Items) on a matching Pokémon. It stays a Mega until Anki's next day change, in every fight and every region. One Mega a day; stones are never used up.
+  - **Wild battles:** a Mega fights with its Mega stats, types and ability, a few levels above the region's level cap (never above its own level), and shows its Mega sprite.
+  - **Getting them:** the Mega Bracelet comes from Korrina (Kalos) or Norman (Hoenn), with your pick of that region's three starters and the Mega Stone for its final form. More stones turn up as rare finds in Kalos and Hoenn; legendary stones and the Red and Blue Orbs come from Champions (gyms package).
+  - **Mega Rayquaza:** collect every other Mega Stone.
+  - 74 Mega Stones and Orbs. Animated Mega sprites by Aronousqui20; Mega Stone icons by SelenaEde (the Legends: Z-A stones recoloured from her set, in MBCMechachu's colours); the Red and Blue Orbs and other item icons by JorMxDos.
+- **Welcome to Ankimon 2.x:** starting region, daily card goal and catch behaviour in one window. Players coming from the original Ankimon see it once on their first start; new players see it after choosing a starter.
+- **Reviewer buttons:** Show Pokémon Buttons applies right away, and the Catch/Defeat buttons hide while Automatic Battle is 1, 2 or 3.
+- **Diggersby's** back sprite shows at its proper size (the sprite pack's copy was twice as big).
+
 ## 2.6 (October 2026)
 - **Unown letters:** each Unown is one of its 28 forms (A to Z, ! and ?), shown in its name and sprite everywhere. Every letter is its own Pokédex entry, and a catch upgrade only replaces an Unown of the same letter.
 - **Training points:** your buddy earns a point for every half of your daily card goal you review (2 a day at your goal). Only the buddy you chose earns them, not a teammate who steps in after it faints. Spend them with the **+** beside a stat in the Pokémon's details to raise it; a maxed stat shows MAX, and a Pokémon with all six maxed shows PERFECT. Points you already had are kept. Friendship no longer gives points (friendship evolutions are unchanged).

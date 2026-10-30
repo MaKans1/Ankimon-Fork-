@@ -1,4 +1,16 @@
 # gyms: changelog
+## 2.7 (October 2026)
+- **Switching:** in manual battles, ⇄ Switch… (beside Dynamax / Tera / Z) shows your bench: a card per teammate still standing with its types, HP and moves, marked ▲ (super effective on the foe out now) or ▼ (not very effective). Click one, or press 1 or 2, to switch it in; that uses your turn. Greyed out while trapped or locked into a move (Outrage, Fly).
+- **Leaders switch too:** the Elite Four, Champions and every rematch, at most 3 times a battle with at least 5 of their moves between two, and only when looking ahead says the switch-in clearly does better. Gym leaders the first time round, totems, Titans, legendaries and expeditions never switch by choice.
+- **Choose team for me** in the team picker: three Pokémon from your whole PC with their best moves for this fight only (optionally from your TMs, which are never used up), then the fight starts. With showdown, quick simulated fights pick between the best few trios.
+- **Manual battles by default;** auto-battle plays a turn every 2 seconds, starting 3 seconds after the window opens.
+- **Battle log:** a switch by choice says who comes back ("Blue withdrew Charizard!"), a second Pokémon of the same species shows as "Magnemite (2)", and each fight's full log is kept in Ankimon's log file for bug reports.
+- **Megas in gym fights:** today's Mega holds its stone and Mega Evolves with its first move (the usual level locks apply). In Kalos and Hoenn, once you've beaten that region's Elite Four, rematched leaders have a Mega of their own and rematches can drop Mega Stones.
+- **Champions** drop legendary Mega Stones and the Red and Blue Orbs once you have the Mega Bracelet: your first win against each Champion guarantees one you don't have yet.
+- **Z-Moves** only work in Alola now, like Dynamax in Galar and Tera in Paldea.
+- **Challenge Gym** (rematch or retry a gym any time) moved from Anki's Tools menu to **Ankimon > Other > Debug**.
+- **Every boss brings at least three Pokémon:** the 15 leaders the original games gave only two (Brock, Misty, Falkner, Whitney, Chuck and others) get a third from their own rematch roster, like Hoothoot for Falkner and Hitmontop for Chuck.
+
 ## 2.6 (October 2026)
 - **Plan ahead:** hover the HUD's gym counter while you review to see who's next, their team and the types to bring. The team picker shows the same three lines (the long notes are gone).
 - **Move cards:** the battle window's move buttons show the move's type colour, category, power and accuracy, and whether it's super effective, not very effective or has no effect on the foe (its Tera type once it Terastallizes).

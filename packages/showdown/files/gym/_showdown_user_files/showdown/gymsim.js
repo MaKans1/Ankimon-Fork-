@@ -48,6 +48,10 @@ function newBattle(t1, t2) {
   carryOver(b, [t1, t2]);
   b.sides.forEach((side, si) => side.pokemon.forEach((p, i) => {
     p.ankimonTera = !!(([t1, t2][si] || [])[i] || {}).canTera;      // set by Ankimon (gym_showdown)
+    p.ankimonMega = !!(([t1, t2][si] || [])[i] || {}).mega;         // today's Mega / a leader's (functions/mega.py)
+    // Gen 9 keeps move-based Megas off: let Ankimon's Rayquaza (Dragon Key) through
+    if (p.ankimonMega && !p.canMegaEvo && p.baseSpecies.name === 'Rayquaza' && p.baseMoves.includes('dragonascent'))
+      p.canMegaEvo = 'Rayquaza-Mega';
   }));
   return b;
 }
@@ -196,7 +200,12 @@ function fmt(line) {
       : `${ctx.leader} sent out ${p[1].split(': ')[1]}!`;
     case '-message': return p[1] || null;
     case '-zpower': return `${cap(who(p[1]))} surrounded itself with its Z-Power!`;
-    case 'detailschange': return null;
+    case 'detailschange': {               // daily Megas: "your Charizard became Mega Charizard X!"
+      const sp = (p[2] || '').split(',')[0];
+      if (!/-(Mega|Primal)/.test(sp)) return null;
+      const nm = /-Primal$/.test(sp) ? 'Primal ' + sp.replace(/-Primal$/, '') : 'Mega ' + sp.replace(/-Mega-?/, ' ').trim();
+      return `${cap(who(p[1]))} became ${nm}!`;
+    }
     case '-terastallize': return `${cap(who(p[1]))} Terastallized into the ${p[2]} type!`;
     case 'drag': return `${cap(who(p[1]))} was dragged out!`;
     case 'faint': return `${cap(who(p[1]))} fainted!`;
@@ -292,7 +301,7 @@ function view(b, sent) {
   const locked = !!(a && req.length === 1 && a.moveSlots.length > 1);
   return {ok: true, turn: b.turn, ended: !!b.ended, winner: b.winner === 'You' ? 'p1' : b.winner === 'Leader' ? 'p2' : null,
     p1: side(b.p1), p2: side(b.p2), moves, locked, z: zView(b), zused: !!b.p1.zMoveUsed,
-    dmax: dmaxView(b), tera: teraView(b),
+    dmax: dmaxView(b), tera: teraView(b), canswitch: canSwitch(b.p1),
     log: readable(b.log.slice(sent))};
 }
 
@@ -748,9 +757,87 @@ function planChoiceP1(b, rollouts = 3, horizon = 8) {
   }
   return 'move ' + best.i;
 }
+
+// ------------------------------------------------------------- switching --
+// You: switch to a team member that's still standing - it uses your turn.
+// Leaders that switch (Elite Four, Champions, rematches: ctx.aiswitch = {max,
+// gap}) do it at most `max` times a battle, with at least `gap` of their own
+// moves between two switches, and only when the look-ahead says the switch-in
+// does clearly better than their best move (SWITCH_MARGIN). Faint replacements
+// don't count. Everyone else never switches by choice.
+const SWITCH_MARGIN = 0.25;        // a quarter of a Pokemon's HP: "might help" isn't enough
+function aiSwitchStart(cfg) {
+  ctx.aiswitch = cfg ? {max: cfg.max == null ? 3 : +cfg.max, gap: cfg.gap == null ? 5 : +cfg.gap,
+                        used: 0, since: null} : null;
+}
+function canSwitch(side) {
+  const req = side.activeRequest;
+  if (!req || !req.active || req.forceSwitch || req.wait) return false;
+  const a = req.active[0];
+  if (a.trapped || a.maybeTrapped) return false;          // Mean Look, Outrage's lock...
+  const p = active(side);                                  // mid Fly / Dig / Solar Beam: no
+  if (p && (p.getLockedMove() || p.getSemiLockedMove())) return false;
+  return side.pokemon.some(p => !p.fainted && !p.isActive);
+}
+function switchTo(side, k) {         // 'switch N' for team slot k (its original place), or null
+  if (!canSwitch(side)) return null;
+  const i = side.pokemon.findIndex(p => p.ankimonIndex === +k && !p.fainted && !p.isActive);
+  return i < 0 ? null : 'switch ' + (i + 1);
+}
+function aiSwitch(b, rollouts = 3, horizon = 8) {
+  const s = ctx.aiswitch;
+  if (!s || s.used >= s.max || (s.since !== null && s.since < s.gap)) return null;
+  if (ctx.totem || ctx.titan || !canSwitch(b.p2)) return null;
+  const bench = b.p2.pokemon.map((p, i) => ({p, i})).filter(x => !x.p.fainted && !x.p.isActive);
+  const opts = usableMoves(b.p2);
+  if (!bench.length || !opts.length) return null;
+  const snap = snapshot(b);
+  const play = c2 => {               // the planning leader's look-ahead, for any first choice
+    let tot = 0;
+    for (let r = 0; r < rollouts; r++) {
+      const c = Battle.fromJSON(snap);
+      if (ctx.guard) guardLock(c);
+      c.log = c.log.slice(); c.resetRNG(PRNG.generateSeed()); c.sentLogPos = c.log.length;
+      try {
+        mc(c, strongest(c.p1, c.p2), c2);
+        for (let t = 1; t < horizon && !c.ended; t++) {
+          if (c.p1.requestState === 'switch' || c.p2.requestState === 'switch') break;
+          mc(c, strongest(c.p1, c.p2), strongest(c.p2, c.p1));
+        }
+      } catch (e) { /* scores where it stopped */ }
+      tot += score(c);
+    }
+    return tot / rollouts;
+  };
+  let stay = Infinity;
+  for (const o of opts) stay = Math.min(stay, play('move ' + o.i));
+  let best = null, bv = Infinity;
+  for (const x of bench) { const v = play('switch ' + (x.i + 1)); if (v < bv) { bv = v; best = x; } }
+  return best && bv < stay - SWITCH_MARGIN ? 'switch ' + (best.i + 1) : null;
+}
+function aiSwitchNote(c2, lines) {    // after the turn: what the leader did (its log lines)
+  const s = ctx.aiswitch;
+  if (!s || !c2) return;
+  if (/^switch /.test(c2)) { s.used++; s.since = 0; return; }
+  // only a move it really used counts (flinched / fully paralyzed / asleep: no;
+  // a move called by another - Sleep Talk's - isn't a second one)
+  if (s.since !== null && (lines || []).some(l => /^\|move\|p2a: /.test(l) && !/\[from\]/.test(l))) s.since++;
+}
+// ------------------------------------------------------------ daily Megas --
+// A Pokémon Ankimon marks (set.mega: today's Mega, or a rematched leader's) holds
+// its Mega Stone and Mega Evolves with its first move; Primal Orbs act on their own.
+function canMega(side) {
+  const a = side.active[0];
+  return !!(a && a.ankimonMega && a.canMegaEvo);
+}
+function megaChoice(b, side, c) {
+  return /^move \d+$/.test(c || '') && canMega(side) ? c + ' mega' : c;
+}
 module.exports = {ctx, cleanSet, newBattle, carryOver, mc, active, usableMoves, nextSwitch, settleSwitches,
+  aiSwitchStart, canSwitch, switchTo, aiSwitch, aiSwitchNote,
   estDamage, strongest, randomChoice, score, planChoice, planChoiceP1, fmt, readable, view,
   totemStart, totemChoice, totemCheck, totemSettle, zOptions, zView, autoZ,
   titanStart, titanSettle, guardStart, guardLock, hpScale,
   dmaxStart, dmaxReady, dmaxView, dmaxLeader, autoDmax, canDmax,
-  teraStart, teraReady, teraBlastAt, teraBlastSwap, teraView, teraLeader, autoTera, canTera};
+  teraStart, teraReady, teraBlastAt, teraBlastSwap, teraView, teraLeader, autoTera, canTera,
+  canMega, megaChoice};

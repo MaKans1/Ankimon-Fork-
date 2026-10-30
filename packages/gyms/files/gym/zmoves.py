@@ -5,7 +5,8 @@ zmoves.py - Z-Moves (Alola).
     takes: nothing to equip.
   * A Pokemon holding a Z-Crystal (Give to hold, in the bag or the PC) can
     turn one move of the crystal's type into its Z-Move, once per battle.
-  * Gyms and expeditions only, on the Showdown engine (it runs the real
+  * Alola only (user 2026-10-28, like Dynamax in Galar and Tera in Paldea): its
+    gyms, trials, rematches and expeditions, on the Showdown engine (it runs the real
     Z-Move rules: power, Z-status effects, once per battle). The built-in
     engine and wild battles have no Z-Moves. Leaders never use them.
   * In the battle window: the "Z-Move" toggle turns the next move you pick
@@ -13,6 +14,7 @@ zmoves.py - Z-Moves (Alola).
     when yours is low or about to be knocked out (gymsim.js autoZ).
 """
 Z_RING = "z-ring"
+REGION = "Alola"
 Z_CRYSTALS = {
     "normalium-z": "Normal", "firium-z": "Fire", "waterium-z": "Water",
     "electrium-z": "Electric", "grassium-z": "Grass", "icium-z": "Ice",
@@ -59,6 +61,13 @@ def can_use_crystal(rec, item) -> bool:
 def z_moves_enabled() -> bool:
     """Z-Moves are on once you own the Z-Ring."""
     return has_ring()
+
+
+def allowed(gym) -> bool:
+    """Z-Moves in this fight: Alola's, with the Z-Ring. Test fights (Game > Test): anywhere, no Ring."""
+    if getattr(gym, "is_test", False):
+        return True
+    return str(getattr(gym, "region", "") or "") == REGION and has_ring()
 
 
 def crystal_for(moves) -> str:

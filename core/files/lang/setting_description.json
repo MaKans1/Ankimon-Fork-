@@ -7,7 +7,7 @@
     "evolution.friendship_time_enabled": "Let Pokémon evolve when they reach their friendship requirement at the right time of day (day/night).",
     "evolution.timezone_auto": "Use this device's local time zone to decide day vs night for evolutions. Turn off to set a fixed UTC offset below.",
     "evolution.timezone_offset": "UTC offset in hours used for the day/night cycle when Auto-detect Time Zone is off (e.g. -5 = New York, 1 = Berlin, 5.5 = India, 0 = UTC). Ignored while auto-detect is on.",
-    "controls.pokemon_buttons": "Enable action buttons for Pokémon commands during reviews.",
+    "controls.pokemon_buttons": "Show Catch and Defeat buttons under the card during reviews. They're hidden while Automatic Battle is 1, 2 or 3, which catch or defeat on their own.",
     "controls.defeat_key": "Key to defeat a beaten wild Pokémon (when Automatic Battle is 0).",
     "controls.catch_key": "Key to catch a beaten wild Pokémon (when Automatic Battle is 0).",
     "controls.key_for_opening_closing_ankimon": "Key to open/close Ankimon interface with control/command key. Write the keys like 'Shift+N' you can also add things like Ctrl, Shift, and multiple button combinations",
