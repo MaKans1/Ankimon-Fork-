@@ -23,7 +23,7 @@ import os
 
 from aqt import mw
 from aqt.qt import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget,
-                    QListWidgetItem, QPushButton, Qt)
+                    QListWidgetItem, QPushButton, Qt, QScrollArea, QFrame)
 
 from . import gym_config as CFG
 from .gym_data import GymMon, ladder, full_ladder, current_region
@@ -162,6 +162,23 @@ def build(gym):
 
 
 # ---------------------------------------------------------------- screen ----
+LOOT_ORDER = {"stone": 0, "item": 1, "heal": 2, "tm": 3}   # user 2026-11-02: stones first, TMs last
+LOOT_COLUMNS_AT = 12                                       # more possible drops than this: two columns
+
+
+def _loot_html(drops) -> str:
+    """The drop list: one column, or two once it gets long (down the first
+    column, then the second)."""
+    if not drops:
+        return "<ul><li>-</li></ul>"
+    li = lambda part: "<ul>%s</ul>" % "".join("<li>%s</li>" % d for d in part)
+    if len(drops) <= LOOT_COLUMNS_AT:
+        return li(drops)
+    half = (len(drops) + 1) // 2
+    return ("<table cellspacing='0' cellpadding='0'><tr><td valign='top'>%s</td>"
+            "<td valign='top'>%s</td></tr></table>" % (li(drops[:half]), li(drops[half:])))
+
+
 class RematchDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent or mw)
@@ -188,7 +205,11 @@ class RematchDialog(QDialog):
         self.detail.setWordWrap(True)
         self.detail.setAlignment(Qt.AlignmentFlag.AlignTop)
         row.addWidget(self.list, 1)
-        row.addWidget(self.detail, 2)
+        scroll = QScrollArea()                  # a long drop list scrolls instead of stretching the window
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(self.detail)
+        row.addWidget(scroll, 2)
         v.addLayout(row, 1)
         btns = QHBoxLayout()
         self.fight = QPushButton("Rematch")
@@ -221,13 +242,16 @@ class RematchDialog(QDialog):
             return
         rg = build(g)
         team = ", ".join("%s Lv %d" % (m.species, m.level) for m in rg.team)
-        # what they might drop - no odds, no count (TMs you own are already left out)
-        drops = dict.fromkeys(rewards.label(e) for e in rewards.available(g.gym_id, rg.rematch_version))
-        loot = "".join("<li>%s</li>" % lbl for lbl in drops)
+        # what they might drop - no odds, no count (TMs you own are already left out):
+        # stones, items, healing, then TMs, A-Z in each
+        pool = rewards.available(g.gym_id, rg.rematch_version)
+        drops = list(dict.fromkeys(lbl for _k, lbl in sorted(
+            ((LOOT_ORDER.get(e["kind"], 2), rewards.label(e)) for e in pool),
+            key=lambda x: (x[0], x[1].lower()))))
         self.detail.setText(
             "<b>%s</b> - %s specialist<br><b>Team:</b> %s<br>"
-            "<b>Rewards:</b> $%d, EXP, and possible drops:<ul>%s</ul>"
-            % (g.leader, g.type_theme, team, rg.cash_reward, loot or "<li>-</li>"))
+            "<b>Rewards:</b> $%d, EXP, and possible drops:%s"
+            % (g.leader, g.type_theme, team, rg.cash_reward, _loot_html(drops)))
         self._update_button()
 
     def _go(self):

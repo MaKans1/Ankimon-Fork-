@@ -46,6 +46,7 @@ class FriendshipEvolution(NamedTuple):
     evo_name: str
     min_happiness: int
     time_of_day: Optional[str]
+    move_type: Optional[str] = None     # "fairy": it must know a move of this type (Sylveon, Gen 8-9)
 
 
 class LevelEvolution(NamedTuple):
@@ -240,6 +241,10 @@ def get_friendship_evolutions_for_species(
 
             time_raw = (row.get("time_of_day") or "").strip().lower()
             time_of_day = time_raw if time_raw in ("day", "night") else None
+            try:                                # Sylveon: a Fairy-type move too (Gen 8-9, user 2026-11-04)
+                move_type = _TYPE_IDS.get(int(row.get("known_move_type_id") or 0))
+            except (TypeError, ValueError):
+                move_type = None
 
             name = return_name_for_id(int(evo))
             evo_name = _pname(name) if name else str(evo)
@@ -250,6 +255,7 @@ def get_friendship_evolutions_for_species(
                     evo_name=evo_name,
                     min_happiness=min_happiness,
                     time_of_day=time_of_day,
+                    move_type=move_type,
                 )
             )
             break  # one friendship row per evolved species is enough
@@ -318,13 +324,90 @@ def get_level_evolutions_for_species(
                 )
             )
             break  # one level-up row per evolved species is enough
+        else:
+            # Move evolutions evolve at a set level in Ankimon (pokedex_functions.MOVE_EVOS, 2026-11-03)
+            from .pokedex_functions import move_evo_level
+            lv = move_evo_level(int(evo))
+            if lv:
+                name = return_name_for_id(int(evo))
+                evolutions.append(LevelEvolution(evo_id=int(evo), evo_name=_pname(name) if name else str(evo),
+                                                 min_level=lv))
 
     evolutions.sort(key=lambda e: e.evo_id)
     return tuple(evolutions)
 
 
+# PokeAPI type ids (pokemon_evolution.csv known_move_type_id)
+_TYPE_IDS = {1: "normal", 2: "fighting", 3: "flying", 4: "poison", 5: "ground", 6: "rock", 7: "bug",
+             8: "ghost", 9: "steel", 10: "fire", 11: "water", 12: "grass", 13: "electric", 14: "psychic",
+             15: "ice", 16: "dragon", 17: "dark", 18: "fairy"}
+
+
+def known_move_types(moves) -> dict:
+    """{type in lower case: the first known move of it, by name} for a moveset
+    ("babydolleyes" -> {"fairy": "Baby-Doll Eyes"})."""
+    out = {}
+    try:
+        from .pokedex_functions import find_details_move
+    except Exception:
+        return out
+    for m in moves or []:
+        try:
+            d = find_details_move(m) or {}
+        except Exception:
+            d = {}
+        t = str(d.get("type") or "").lower()       # Showdown data: "Fairy"
+        if t and t not in out:
+            out[t] = str(d.get("name") or m)
+    return out
+
+
+def move_learn_hint(pokemon_id, move_type) -> str:
+    """How this species picks up a move of that type: "Baby-Doll Eyes Lv 15, Charm
+    Lv 45 or a TM" ("" if it can't)."""
+    try:
+        import re
+        from .learnset_retrieval import _load_learnset_cache
+        from .pokedex_functions import find_details_move
+        key = re.sub(r"[^a-z0-9]", "", str(return_name_for_id(int(pokemon_id)) or "").lower())
+        ls = ((_load_learnset_cache() or {}).get(key) or {}).get("learnset") or {}
+        lv, tm = [], False
+        for m, codes in ls.items():
+            d = find_details_move(m) or {}
+            if str(d.get("type") or "").lower() != str(move_type).lower():
+                continue
+            lvs = [int(c[2:]) for c in codes if re.match(r"^9L\d+$", str(c))]
+            if lvs:
+                lv.append((min(lvs), str(d.get("name") or m)))
+            if any(str(c) == "9M" for c in codes):
+                tm = True
+        parts = ["%s Lv %d" % (n, l) for l, n in sorted(lv)]
+        if tm:
+            return (", ".join(parts) + " or a TM") if parts else "a TM"
+        return ", ".join(parts)
+    except Exception:
+        return ""
+
+
+def _moves_of(individual_id):
+    """Its moves now: the battle buddy's live ones if it's in front, else saved."""
+    if not individual_id:
+        return None
+    try:
+        from ..singletons import main_pokemon
+        if str(getattr(main_pokemon, "individual_id", "")) == str(individual_id):
+            return list(getattr(main_pokemon, "attacks", None) or [])
+    except Exception:
+        pass
+    try:
+        from aqt import mw
+        return list((mw.ankimon_db.get_pokemon(individual_id) or {}).get("attacks") or [])
+    except Exception:
+        return None
+
+
 def _select_evolution(
-    evos: tuple[FriendshipEvolution, ...], time_of_day: str
+    evos: tuple[FriendshipEvolution, ...], time_of_day: str, moves=None
 ) -> FriendshipEvolution:
     """Pick the most appropriate friendship evolution for the current time.
 
@@ -340,6 +423,18 @@ def _select_evolution(
     Returns:
         The chosen :class:`FriendshipEvolution`.
     """
+    # A move-gated evolution (Sylveon: a Fairy-type move) comes first, whatever the
+    # time, when it knows a move of that type - and is never picked when it doesn't
+    # (Gen 8-9; user 2026-11-04).
+    gated = [e for e in evos if getattr(e, "move_type", None)]
+    if gated:
+        have = known_move_types(moves) if moves else {}
+        ok = [e for e in gated if e.move_type in have]
+        if ok:
+            return min(ok, key=lambda e: e.evo_id)
+        rest = [e for e in evos if not getattr(e, "move_type", None)]
+        if rest:
+            evos = tuple(rest)
     eligible_now = [e for e in evos if e.time_of_day in (time_of_day, None)]
     if eligible_now:
         # Prefer explicit-time rows (e.g. Espeon@day) over blank-time rows, then
@@ -374,12 +469,16 @@ def evolution_readiness(pokemon: Any, now: Optional[datetime] = None) -> dict:
         everstone = pokemon.get("everstone", False)
         evolution_rejected = pokemon.get("evolution_rejected", False)
         level = _coerce_int(pokemon.get("level", 1), 1)
+        moves = pokemon.get("attacks")              # for move-gated evolutions (Sylveon)
+        individual_id = pokemon.get("individual_id")
     else:
         species_id = getattr(pokemon, "id", None)
         friendship = _coerce_int(getattr(pokemon, "friendship", 0), 0)
         everstone = getattr(pokemon, "everstone", False)
         evolution_rejected = getattr(pokemon, "evolution_rejected", False)
         level = _coerce_int(getattr(pokemon, "level", 1), 1)
+        moves = getattr(pokemon, "attacks", None)
+        individual_id = getattr(pokemon, "individual_id", None)
 
     time_of_day = get_time_of_day(now)
 
@@ -433,7 +532,9 @@ def evolution_readiness(pokemon: Any, now: Optional[datetime] = None) -> dict:
             not_evolvable=not_evolvable,
         )
 
-    chosen = _select_evolution(evos, time_of_day)
+    if moves is None and any(getattr(e, "move_type", None) for e in evos):
+        moves = _moves_of(individual_id)
+    chosen = _select_evolution(evos, time_of_day, moves)
     evo_id = chosen.evo_id
     evo_name = chosen.evo_name
     min_happiness = chosen.min_happiness
@@ -441,7 +542,9 @@ def evolution_readiness(pokemon: Any, now: Optional[datetime] = None) -> dict:
 
     friendship_remaining = max(0, min_happiness - friendship)
     time_ok = required_time is None or required_time == time_of_day
-    ready = (not everstone) and friendship >= min_happiness and time_ok
+    move_type = getattr(chosen, "move_type", None)
+    move_ok = not move_type or move_type in known_move_types(moves)
+    ready = (not everstone) and friendship >= min_happiness and time_ok and move_ok
 
     status_text = _build_status_text(
         everstone=everstone,
@@ -453,6 +556,11 @@ def evolution_readiness(pokemon: Any, now: Optional[datetime] = None) -> dict:
         time_of_day=time_of_day,
         rejected=evolution_rejected,
     )
+    if move_type and not move_ok and not everstone:
+        status_text = ("Learn a %s-type move to evolve into %s" % (move_type.capitalize(), evo_name)
+                       if friendship_remaining == 0 else
+                       "%d friendship + a %s-type move to evolve into %s"
+                       % (friendship_remaining, move_type.capitalize(), evo_name))
 
     return {
         "evolvable": True,
@@ -577,6 +685,7 @@ def check_friendship_evolution_for_pokemon(
     friendship: int = 0,
     evolution_rejected: bool = False,
     now: Optional[datetime] = None,
+    moves=None,
 ) -> Optional[int]:
     """Prompt a friendship evolution for a Pokémon if it is ready.
 
@@ -595,7 +704,8 @@ def check_friendship_evolution_for_pokemon(
     ):
         return None
 
-    shim = {"id": pokemon_id, "friendship": friendship, "everstone": everstone}
+    shim = {"id": pokemon_id, "friendship": friendship, "everstone": everstone,
+            "attacks": moves, "individual_id": individual_id}       # Sylveon's Fairy move
     try:
         # level too, for the trade-evolution gate (Lv 37 + friendship)
         from ..wild import wild_rules as _wild

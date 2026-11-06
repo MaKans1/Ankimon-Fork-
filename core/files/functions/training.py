@@ -12,6 +12,8 @@ review after this update); friendship no longer adds points, and it still drives
 friendship evolutions and the no-trade evolution rule as before.
 """
 POINTS_PER = 50            # the old friendship rate (frozen legacy points only)
+FRIENDSHIP_CARDS = 2       # cards per friendship point: half a point a card (user 2026-11-05)
+FRIENDSHIP_KEY = "friendship_review_count"
 IV_MAX = 31
 STATS = ("hp", "atk", "def", "spa", "spd", "spe")
 COUNT_KEY = "training_review_count"
@@ -65,8 +67,42 @@ def _freeze_legacy(db):
     _migrated = True
 
 
+def friendship_on_review():
+    """Once per answered card: every FRIENDSHIP_CARDS cards your buddy gains 1
+    friendship (user 2026-11-05; it used to be +5-9 per wild win, which reached
+    160 in about half a day). Same buddy as training points."""
+    try:
+        from aqt import mw
+        db = mw.ankimon_db
+        n = _int(db.get_user_data(FRIENDSHIP_KEY, 0)) + 1
+        if n < FRIENDSHIP_CARDS:
+            db.set_user_data(FRIENDSHIP_KEY, n)
+            return
+        db.set_user_data(FRIENDSHIP_KEY, 0)
+        rec = None
+        try:
+            from ..wild import wild_rules as _wr
+            _iid = _wr.buddy_iid()
+            rec = db.get_pokemon(_iid) if _iid else None
+        except Exception:
+            rec = None
+        rec = rec or db.get_main_pokemon()
+        if not rec or not rec.get("individual_id"):
+            return
+        from ..singletons import main_pokemon
+        live = getattr(main_pokemon, "individual_id", None) == rec["individual_id"]
+        new = max(_int(rec.get("friendship")), _int(getattr(main_pokemon, "friendship", 0)) if live else 0) + 1
+        rec["friendship"] = new
+        db.save_pokemon(rec)
+        if live:                            # the buddy in memory is saved over the record after a win
+            main_pokemon.friendship = new
+    except Exception as e:
+        print("Ankimon friendship:", e)
+
+
 def on_review():
     """Once per answered card: every step() cards, your buddy earns a point."""
+    friendship_on_review()
     try:
         from aqt import mw
         db = mw.ankimon_db

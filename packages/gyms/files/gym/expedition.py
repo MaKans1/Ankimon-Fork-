@@ -207,7 +207,8 @@ CURE = {"full-heal": None, "full-restore": None, "lava-cookie": None, "old-gatea
         "antidote": ("psn", "tox"), "paralyze-heal": ("par",), "awakening": ("slp",),
         "burn-heal": ("brn",), "ice-heal": ("frz",)}
 PP_ITEMS = {"ether": (10, False), "max-ether": (999, False), "elixir": (10, True), "max-elixir": (999, True)}
-USABLE = set(HEAL) | set(REVIVE) | set(CURE) | set(PP_ITEMS)
+TEAM_REVIVE = {"sacred-ash"}                # every fainted member at once, full HP (2026-11-03)
+USABLE = set(HEAL) | set(REVIVE) | set(CURE) | set(PP_ITEMS) | TEAM_REVIVE
 
 
 def _label(name):
@@ -229,7 +230,7 @@ def bag() -> Dict[str, int]:
 
 def can_use(item, c: Combatant) -> bool:
     st = getattr(c, "status", None)
-    if item in REVIVE:
+    if item in REVIVE or item in TEAM_REVIVE:
         return c.hp <= 0
     if c.hp <= 0:
         return False
@@ -659,6 +660,15 @@ class CampDialog(QDialog):
         return f
 
     def _pick_target(self, item, btn):
+        if item in TEAM_REVIVE:                 # Sacred Ash: no target to pick
+            down = [c for c in self.run.team if c.hp <= 0]
+            if down and bag().get(item, 0) > 0:
+                for c in down:
+                    c.hp, c.status = c.max_hp, None
+                self.note = "%s revived! (full HP)" % ", ".join(c.name for c in down)
+                consume(item)
+                self._build()
+            return
         menu = QMenu(self)
         for c in self.run.team:
             a = menu.addAction("%s  (%s)" % (c.name, "fainted" if c.hp <= 0 else "%d/%d HP" % (c.hp, c.max_hp)))

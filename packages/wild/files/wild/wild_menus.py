@@ -212,6 +212,36 @@ class BuddyMenu(QDialog):
             pass
         return "Held item: " + label
 
+    def _held_bits(self, mp):
+        """(item name or "None", the Z-Move note after it)."""
+        item = getattr(mp, "held_item", None)
+        if not item:
+            return "None", ""
+        full = self._held_line(mp)[len("Held item: "):]
+        try:
+            from ..utils import item_display_name
+            name = item_display_name(item)
+        except Exception:
+            name = str(item).replace("-", " ").title()
+        return name, (full[len(name):].strip() if full.startswith(name) else "")
+
+    def _pick_held(self):
+        """Equip from the items that help this Pokémon (held_picker, 2026-11-04)."""
+        mp = self._mon()
+        iid = getattr(mp, "individual_id", None)
+        if not iid:
+            return
+        moves = list(mp.attacks or []) + list((self.scaled or (None, None, []))[2] or [])
+        try:
+            from .held_picker import HeldPicker
+            dlg = HeldPicker(self, iid, moves, live=_S().main_pokemon if self._is_buddy() else None)
+        except Exception as e:
+            _tip("Couldn't open the item list: %s" % e, "#EF5350")
+            return
+        dlg.exec()
+        if dlg.changed:
+            self._build()
+
     # --- layout ---
     def _build(self):
         if self.body is not None:
@@ -233,7 +263,16 @@ class BuddyMenu(QDialog):
         if st:
             hp_line += "   |   " + st
         v.addWidget(QLabel(hp_line))
-        v.addWidget(QLabel(self._held_line(mp)))
+        name, note = self._held_bits(mp)        # the held item is a button (user 2026-11-04)
+        held = QHBoxLayout()
+        held.addWidget(QLabel("Held item:"))
+        hb = QPushButton(name)
+        hb.clicked.connect(self._pick_held)
+        held.addWidget(hb)
+        if note:
+            held.addWidget(_small(note))
+        held.addStretch(1)
+        v.addLayout(held)
         team_line = self._team_line()
         if team_line:
             v.addWidget(_small(team_line))
@@ -284,8 +323,9 @@ class BuddyMenu(QDialog):
             cap, reg, smoves = self.scaled
             right = QVBoxLayout()
             right.addWidget(QLabel("<b>Scaled Moves</b>"))
-            right.addWidget(_small("Used while it fights at Lv %d in %s, wild and gym battles alike. "
-                                   "Ticked ones are used against wild Pokémon." % (cap, reg)))
+            right.addWidget(_small("Moves from up to Lv %d, the top of the next challenge in %s. Used in "
+                                   "wild battles here and in gym battles and rematches. Ticked ones are "
+                                   "used against wild Pokémon." % (cap, reg)))
             sgrid = QGridLayout()
             for row, mv in enumerate(smoves):
                 name, detail = _move_text(mv)
@@ -319,7 +359,7 @@ class BuddyMenu(QDialog):
         row1.addWidget(b)
         if self.scaled:
             b = QPushButton("Remember a Scaled Move...")
-            b.setToolTip("Add a move it can use at Lv %d to its scaled moves. Its full-level moves "
+            b.setToolTip("Add a move from up to Lv %d to its scaled moves. Its full-level moves "
                          "stay as they are." % self.scaled[0])
             b.clicked.connect(self._remember_scaled)
             row1.addWidget(b)
@@ -368,6 +408,7 @@ class BuddyMenu(QDialog):
             cap = W.level_cap()
             if not cap or int(mp.level) <= cap:
                 return None
+            cap = W.scaled_cap(int(mp.level)) or cap      # up to the next challenge's top (2026-11-03)
             from ..functions import move_seal as _ms
             rec = mw.ankimon_db.get_pokemon(getattr(mp, "individual_id", None))
             if not rec:

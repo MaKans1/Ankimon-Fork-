@@ -59,6 +59,7 @@
     "gym.leader_smart_moves": "Smart Gym Leaders (plan ahead)",
     "gym.auto_battle": "Gym Auto-Battle By Default",
     "gym.show_battle_log": "Show Gym Battle Log",
+    "gym.show_team_picker": "Display Choose Team for Me",
     "gym.decline_cooldown_reviews": "Cards Until Re-Challenge After Declining",
     "battle.defeat_xp_multiplier": "XP Multiplier For Defeating",
     "battle.capture_xp_multiplier": "XP Multiplier For Catching",

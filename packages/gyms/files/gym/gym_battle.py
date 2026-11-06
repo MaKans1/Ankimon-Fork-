@@ -172,8 +172,11 @@ def build_leader_team(gym) -> List[Combatant]:
 
 
 # ---------------------------------------------------------------- player ---
-def _obj_from_saved(rec, cap=None) -> Optional[PokemonObject]:
-    """Rebuild a PokemonObject from a saved captured_pokemon record."""
+def _obj_from_saved(rec, cap=None, move_cap=None) -> Optional[PokemonObject]:
+    """Rebuild a PokemonObject from a saved captured_pokemon record. move_cap: the
+    challenge's top level (gyms, the Elite Four, rematches - gym_ui.challenge_top):
+    its scaled moves reach it and only moves above it are sealed (user 2026-11-03).
+    None (expeditions, legendaries, tests): sealed at the fight's own level."""
     try:
         name = rec.get("name", "?")
         sid = int(rec.get("id") or search_pokedex(name.lower(), "species_id") or 0)
@@ -214,10 +217,11 @@ def _obj_from_saved(rec, cap=None) -> Optional[PokemonObject]:
                     from ..wild import wild_rules as _w
                     wcap = _w.level_cap()
                     if wcap and real > wcap and not rec.get("_picked_moves"):   # autopick chose for this level
-                        moves = move_seal.scaled_moves(rec, _w.region(), wcap)[0]
+                        sc = _w.scaled_cap(real) if move_cap and hasattr(_w, "scaled_cap") else None
+                        moves = move_seal.scaled_moves(rec, _w.region(), sc or wcap)[0]
                 except ImportError:
                     pass
-                usable, sealed = move_seal.seal(name, moves, int(p.level), real)
+                usable, sealed = move_seal.seal(name, moves, max(int(p.level), int(move_cap or 0)), real)
                 p.attacks = usable or move_seal.fallback(name, int(p.level))
                 p.sealed_moves = sealed
             except Exception as e:
@@ -311,12 +315,13 @@ def available_party() -> List[dict]:
     return out
 
 
-def build_player_team(selected: List[dict], cap=None) -> List[Combatant]:
+def build_player_team(selected: List[dict], cap=None, move_cap=None) -> List[Combatant]:
     """Deep-copies deliberately: damage must never touch the saved Pokémon.
-    Discarding these on exit IS the heal. cap: the boss's level (boss_level)."""
+    Discarding these on exit IS the heal. cap: the boss's level (boss_level);
+    move_cap: the challenge's top level (_obj_from_saved)."""
     out = []
     for rec in selected[:TEAM_SIZE]:
-        p = _obj_from_saved(copy.deepcopy(rec), cap)
+        p = _obj_from_saved(copy.deepcopy(rec), cap, move_cap)
         if p is None:
             continue
         pp = build_pp(p.attacks)

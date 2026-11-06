@@ -354,7 +354,7 @@ def random_item():
         if name.endswith("-tera-shard"):
             continue                    # Tera Shards: Paldea leaders drop the one their ace used
 
-        item_names.append(name)
+        item_names.append(name.lower())         # "Peat-Block.png" -> peat-block (2026-11-03)
 
     # --- Mega Stones: rare finds in Kalos and Hoenn once you have the Mega Bracelet
     try:
@@ -506,6 +506,7 @@ def daily_item_list():
 # Function to give an item to the player
 def give_item(item_name: str, item_type: Optional[str] = None):
     """Gives an item to the user."""
+    item_name = str(item_name).lower()          # one bag entry per item (a find once came as "Peat-Block")
     db = mw.ankimon_db
     
     # Get current item or create new
@@ -629,6 +630,10 @@ _Z_TYPES = {"normalium": "Normal", "firium": "Fire", "waterium": "Water", "elect
             "steelium": "Steel", "fairium": "Fairy"}
 
 
+# No use anywhere in Ankimon (user 2026-11-03: the bag and loot were bloated): never sold or found.
+USELESS_ITEMS |= {"amulet-coin", "cleanse-tag", "escape-rope", "exp-share", "luck-incense", "pure-incense", "pass-orb", "poke-doll", "poke-toy", "smoke-ball", "relic-band", "relic-copper", "relic-crown", "relic-gold", "relic-silver", "relic-statue", "relic-vase"}
+
+
 # Galar / Paldea rewards: never random drops, named and described here
 REWARD_ONLY = {"dynamax-band", "tera-orb", "herba-mystica",
                "purple-stake", "yellow-stake", "green-stake", "blue-stake"}
@@ -669,6 +674,20 @@ def _z_item_text(item_name):
     return None
 
 
+# Items the description tables don't cover (user 2026-11-03: Ursaring's Peat Block had none).
+EXTRA_ITEM_TEXT = {
+    "peat-block": "A block of muddy peat dug from a bog. It makes Ursaring evolve.",
+    "black-augurite": "A glassy black stone that splits into razor-sharp flakes. It makes Scyther evolve.",
+    "auspicious-armor": "Armor said to bring good fortune to its wearer. It makes Charcadet evolve "
+                        "into Armarouge.",
+    "malicious-armor": "Armor steeped in grudges and ill will. It makes Charcadet evolve into Ceruledge.",
+    "metal-alloy": "A strange lump of many metals fused in layers. It makes Duraludon evolve.",
+    "syrupy-apple": "An apple coated in thick, sticky syrup. It makes Applin evolve into Dipplin.",
+    "unremarkable-teacup": "A chipped, ordinary-looking teacup. It makes Poltchageist evolve.",
+    "masterpiece-teacup": "A fine teacup made by a master potter. It makes Poltchageist evolve.",
+}
+
+
 def get_item_description(item_name, language_id):
     """
     Fetch the flavor text for an item based on its item_id, version_group_id, and language_id.
@@ -680,8 +699,10 @@ def get_item_description(item_name, language_id):
     """
     if _z_item_text(item_name):
         return _z_item_text(item_name)
+    if str(item_name or "").lower() in EXTRA_ITEM_TEXT:
+        return EXTRA_ITEM_TEXT[str(item_name).lower()]
     try:
-        item_id = get_item_id(item_name)
+        item_id = get_item_id(str(item_name or "").lower())
         file_path = csv_file_descriptions
         # Normalize language: fall back to Spanish data for es_latam (14), English on errors.
         try:

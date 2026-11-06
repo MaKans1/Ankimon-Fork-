@@ -128,15 +128,20 @@ def modify_percentages(total_reviews, daily_average, trainer_level):
             if main_pokemon.level < level_thresholds.get(tier, float("inf")):
                 percentages[tier] = 0  # Set percentage to 0 if the level requirement isn't met
 
-    # Example modification based on trainer level
-    if trainer_level:
-        adjustment = 5  # Adjustment value for the example
-        if trainer_level > 10:
-            for tier in percentages:
-                if tier == "Normal":
-                    percentages[tier] = max(percentages[tier] - adjustment, 0)
-                else:
-                    percentages[tier] = percentages.get(tier, 0) + adjustment
+    # No trainer-level adjustment (user 2026-11-02): the original "example" one added
+    # 5 points to every rare tier past trainer level 10, so Ultra spawns ran at ~9%
+    # instead of 5-8% (Legendary / Mythical rolls are re-rolled - wild_rules.region_allows).
+    # Daily card goal met: every rare tier twice as likely (hidden; wild_rules.goal_bonus)
+    try:
+        from ..wild import wild_rules as _wild
+        _bonus = _wild.goal_bonus()
+    except Exception:
+        _bonus = 1
+    if _bonus > 1:
+        for tier in percentages:
+            if tier != "Normal":
+                percentages[tier] *= _bonus
+        percentages["Normal"] = max(0.0, 100.0 - sum(v for t, v in percentages.items() if t != "Normal"))
 
     # Normalize percentages to ensure they sum to 100
     total = sum(percentages.values())
@@ -509,6 +514,11 @@ def new_pokemon(
         is_shiny,
     ) = generate_random_pokemon(main_pokemon.level, ankimon_tracker_obj)
     try:
+        from .mobile_finds import note_encounter     # cards per encounter, for phone reviews
+        note_encounter()
+    except Exception:
+        pass
+    try:
         from .unown import roll as _unown_roll       # Ankimon 2.6: an Unown's letter
         _letter = _unown_roll(pkmn_id)
     except Exception:
@@ -755,7 +765,8 @@ def save_main_pokemon_progress(
         # Friendship is uncapped — it keeps climbing past MAX_FRIENDSHIP (400) so
         # players can flex a super-bonded Pokémon. The progress bar still fills at
         # MAX_FRIENDSHIP; the raw number above it is what keeps growing.
-        main_pokemon.friendship += random.randint(5, 9)
+        # Friendship comes from reviews now - 1 for every 2 cards, training.py
+        # friendship_on_review (user 2026-11-05: +5-9 a win reached 160 in half a day)
         mainpkmndata["friendship"] = main_pokemon.friendship
         if not evolution_prompted:
             friendship_evo_id = check_friendship_evolution_for_pokemon(
@@ -765,6 +776,7 @@ def save_main_pokemon_progress(
                 main_pokemon.everstone,
                 main_pokemon.friendship,
                 getattr(main_pokemon, "evolution_rejected", False),
+                moves=getattr(main_pokemon, "attacks", None),
             )
             if friendship_evo_id is not None:
                 evolution_prompted = True

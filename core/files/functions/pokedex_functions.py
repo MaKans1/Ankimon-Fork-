@@ -783,7 +783,7 @@ def check_evolution_for_pokemon(
                     
                     if target_data:
                         # In Smogon-style pokedex.json, evoLevel is stored on the evolved species
-                        min_level = safe_int(target_data.get("evoLevel"))
+                        min_level = safe_int(target_data.get("evoLevel")) or move_evo_level(normalized_target)
                         
                         if min_level > 0 and level >= min_level:
                             condition = (target_data.get("evoCondition") or "").lower()
@@ -806,7 +806,7 @@ def check_evolution_for_pokemon(
             for evos in possible_evos:
                 evo_data = get_pokemon_evolution_data(safe_int(evos))
                 if evo_data and safe_int(evo_data.get("evolution_trigger_id", 0)) == 1:
-                    min_level = safe_int(evo_data.get("minimum_level"))
+                    min_level = safe_int(evo_data.get("minimum_level")) or move_evo_level(safe_int(evos))
                     if min_level > 0 and level >= min_level:
                         time_raw = (evo_data.get("time_of_day") or "").strip().lower()
                         time_of_day = time_raw if time_raw in ("day", "night") else None
@@ -921,6 +921,39 @@ _EXTRA_ITEM_EVOS = [
     {"evolved_species_id": "1018", "evolution_trigger_id": "3", "trigger_item_id": "10003"},  # Archaludon: Metal Alloy
 ] + [{"evolved_species_id": "869", "evolution_trigger_id": "3", "trigger_item_id": str(i)}   # Alcremie: any Sweet
      for i in range(1167, 1174)]
+
+# "Level up knowing a move" evolutions (user 2026-11-03). Ankimon doesn't track known moves for
+# evolution, so - a game-derived decision, like the trade evolutions losing the trade - these evolve
+# at a set level instead: when the pre-evolution learns that move by level-up in the newest games,
+# never earlier than the evolution-item gate (Lv 16 first evolution, Lv 30 second). Revisit if
+# known-move evolution is ever tracked. Regional forms (Galarian Mr. Mime) stay out.
+MOVE_EVOS = {           # evolved species id: (name key, level)
+    122: ("mrmime", 32),        # Mime Jr. - Mimic, Lv 32
+    185: ("sudowoodo", 16),     # Bonsly - Mimic, Lv 16
+    424: ("ambipom", 32),       # Aipom - Double Hit, Lv 32
+    463: ("lickilicky", 16),    # Lickitung - Rollout, Lv 6
+    465: ("tangrowth", 24),     # Tangela - Ancient Power, Lv 24
+    469: ("yanmega", 33),       # Yanma - Ancient Power, Lv 33
+    473: ("mamoswine", 30),     # Piloswine - Ancient Power, relearn only
+    763: ("tsareena", 30),      # Steenee - Stomp, Lv 28
+    804: ("naganadel", 16),     # Poipole - Dragon Pulse, relearn / TM
+    853: ("grapploct", 35),     # Clobbopus - Taunt, Lv 35
+    981: ("farigiraf", 32),     # Girafarig - Twin Beam, Lv 32
+    982: ("dudunsparce", 32),   # Dunsparce - Hyper Drill, Lv 32
+    1019: ("hydrapple", 30),    # Dipplin - Dragon Cheer, TM only
+}
+_MOVE_EVO_KEYS = {k: lv for k, lv in MOVE_EVOS.values()}
+
+
+def move_evo_level(species) -> int:
+    """The level a move evolution happens at in Ankimon (MOVE_EVOS), by species
+    id or name; 0 if the species doesn't evolve that way."""
+    try:
+        if isinstance(species, int) or str(species).strip().isdigit():
+            return MOVE_EVOS.get(int(species), (None, 0))[1]
+        return _MOVE_EVO_KEYS.get("".join(ch for ch in str(species).lower() if ch.isalnum()), 0)
+    except Exception:
+        return 0
 
 
 def get_pokemon_item_evolution_rows(pokemon_id):

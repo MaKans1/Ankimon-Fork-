@@ -59,6 +59,11 @@ def _one(evo, level, single):
     name = d.get("name") or str(evo)
     t, lv = d.get("evoType"), d.get("evoLevel")
     item, cond, move = d.get("evoItem"), d.get("evoCondition"), d.get("evoMove")
+    if t == "levelMove" and not lv:             # move evolutions: a set level in Ankimon (2026-11-03)
+        from .pokedex_functions import move_evo_level
+        lv = move_evo_level(_key(evo)) or None
+        if lv:
+            t = None
     if not item and _key(evo) in ITEM_COND:
         item, t, cond = ITEM_COND[_key(evo)], "useItem", None
     when = (", %s" % cond) if cond else ""      # no brackets: the pixel font draws them as @
@@ -87,8 +92,81 @@ def _one(evo, level, single):
             game = str(cond or "a special condition").rstrip(".")
             game = game[:1].lower() + game[1:]
         how = "%s - not in Ankimon yet" % game
-        full = "Evolves into %s by %s in the games - not in Ankimon yet" % (name, game)
+        full = "Evolves into %s %s%s in the games - not in Ankimon yet" % (    # not "by with a..." (Sylveon)
+            name, "" if game.startswith("with ") else "by ", game)
     return full if single else "%s → %s" % (how, name)
+
+
+def evolution_pages(species_id, level, friendship=0, live_friendship=True, moves=None) -> list:
+    """Each evolution's requirement, A-Z, for the details window's arrows (user
+    2026-11-04): [{"id", "name", "text"}]; [] unless it has two or more. Friendship
+    evolutions say how much friendship is left (and the time of day) when that
+    feature is on - Sylveon also says whether it knows a Fairy-type move and how
+    to learn one; the rest use the same sentence as a single evolution."""
+    try:
+        from .pokedex_functions import _load_pokedex_cache, search_pokedex_by_id
+        dex = _load_pokedex_cache() or {}
+        d = dex.get(_key(search_pokedex_by_id(int(species_id)))) or {}
+    except Exception:
+        return []
+    evos = list(d.get("evos") or [])
+    if not d.get("forme"):                      # as evolution_hint: normal forms evolve into normal forms
+        normal = [e for e in evos if (dex.get(_key(e)) or {}).get("forme") not in ("Alola", "Galar", "Hisui", "Paldea")]
+        evos = normal or evos
+    if len(evos) < 2:
+        return []
+    live = {}
+    if live_friendship:
+        try:
+            from . import friendship_evolution as FE
+            tod = FE.get_time_of_day()
+            fevos = list(FE.get_friendship_evolutions_for_species(int(species_id)) or [])
+            fr = int(friendship or 0)
+            have = FE.known_move_types(moves) if hasattr(FE, "known_move_types") else {}
+            gated = [e for e in fevos if getattr(e, "move_type", None)]
+            gated_ok = [e for e in gated if e.move_type in have]
+            plain = [e for e in fevos if not getattr(e, "move_type", None)]
+            for e in gated:                     # Sylveon: 160 friendship + a Fairy-type move (Gen 8-9)
+                need = max(0, int(e.min_happiness) - fr)
+                typ = e.move_type.capitalize()
+                if e.move_type in have:
+                    live[int(e.evo_id)] = ("Ready to evolve into %s! It knows %s" % (e.evo_name, have[e.move_type])
+                                           if need == 0 else "%d friendship to evolve into %s - it knows %s"
+                                           % (need, e.evo_name, have[e.move_type]))
+                else:
+                    hint = FE.move_learn_hint(int(species_id), e.move_type)
+                    head = ("Learn a %s move to evolve into %s, day or night" % (typ, e.evo_name) if need == 0 else
+                            "%d friendship + a %s move to evolve into %s, day or night" % (need, typ, e.evo_name))
+                    live[int(e.evo_id)] = head + (". Learns %s" % hint if hint else "")
+            # the others: only the ones Evolve now can give (by day / by night)
+            reach = {int(FE._select_evolution(plain, t).evo_id) for t in ("day", "night")} if plain else set()
+            for e in plain:
+                if int(e.evo_id) not in reach:
+                    continue
+                if gated_ok:                    # a known Fairy move wins over the time of day
+                    g = gated_ok[0]
+                    live[int(e.evo_id)] = "It knows %s, so it becomes %s instead of %s" % (
+                        have[g.move_type], g.evo_name, e.evo_name)
+                    continue
+                need = max(0, int(e.min_happiness) - fr)
+                ok = e.time_of_day is None or e.time_of_day == tod
+                live[int(e.evo_id)] = FE._build_status_text(
+                    everstone=False, ready=need == 0 and ok, evo_name=e.evo_name, friendship_remaining=need,
+                    required_time=e.time_of_day, time_ok=ok, time_of_day=tod)
+        except Exception:
+            live = {}
+    level = int(level or 1)
+    pages = []
+    for e in evos:
+        x = dex.get(_key(e)) or {}
+        sid = int(x.get("species_id") or x.get("num") or 0)
+        try:
+            text = live.get(sid) or _one(e, level, True)
+        except Exception:
+            continue
+        pages.append({"id": sid, "name": str(x.get("name") or e), "text": text})
+    pages.sort(key=lambda p: p["name"].lower())
+    return pages if len(pages) > 1 else []
 
 
 def evolution_hint(species_id, level, everstone=False) -> str:

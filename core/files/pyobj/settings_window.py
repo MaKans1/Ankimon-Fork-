@@ -278,6 +278,13 @@ class SettingsWindow(QMainWindow):
                 layout.addWidget(hint)
                 created_widgets.append(hint)
                 self.pacing_hints[key] = hint
+            if key == "battle.daily_average":      # user 2026-11-02
+                recal = QPushButton("Recalibrate progression speed")
+                recal.setToolTip("Sets the gym interval, the waits after a loss or \"Not now\" and the "
+                                 "EXP multiplier for the goal above, and saves them.")
+                recal.clicked.connect(self._recalibrate)
+                layout.addWidget(recal)
+                created_widgets.append(recal)
 
         return created_widgets, friendly_name, description
 
@@ -427,6 +434,7 @@ class SettingsWindow(QMainWindow):
                 "Gym Auto-Battle By Default",
                 "Elite Four: Classic Gauntlet",
                 "Show Gym Battle Log",
+                "Display Choose Team for Me",
             ]},
             # "Generations" checkboxes hidden: Game > Travel decides which
             # region's Pokemon appear (the keys stay in the config, unused).
@@ -531,26 +539,37 @@ class SettingsWindow(QMainWindow):
                 w.setText(str(rec[key]))
         self._update_pacing_hints()
 
-    def _on_pacing_edited(self, which):
-        """Goal changed: all four follow. Cards per round changed: EXP follows.
-        Only on a real change, so clicking in and out keeps your own values."""
-        w = self.input_widgets.get(which)
-        if not isinstance(w, QLineEdit):
+    def _recalibrate(self):
+        """Recalibrate progression speed: the goal typed above sets the gym
+        interval, both waits and EXP (pacing.recommended), saved right away."""
+        P = self._pacing()
+        if P is None:
             return
-        if w.text().strip() == self._pacing_last.get(which):
+        goal, cpr = self._pacing_inputs()
+        try:
+            g = int(str(goal).strip())
+            assert 10 <= g <= 5000
+        except Exception:
+            QMessageBox.warning(self, "Daily card goal", "Enter a whole number from 10 to 5000 first.")
             return
-        self._pacing_last[which] = w.text().strip()
-        self._apply_pacing(_PACED if which == "battle.daily_average"
-                           else ("battle.defeat_xp_multiplier",))
+        rec = P.recommended(g, cpr)
+        self._apply_pacing(_PACED)
+        self.config["battle.daily_average"] = g
+        self.config.update(rec)
+        self.save_config_callback(self.config)
+        QMessageBox.information(self, "Progression recalibrated", (
+            "For %d cards a day:\n\nA gym every %d cards\nRetry after a loss: %d cards\n"
+            "\"Not now\" waits %d cards\nEXP multiplier: x%s") % (
+            g, rec["gym.reviews_per_gym"], rec["gym.retry_cost_reviews"],
+            rec["gym.decline_cooldown_reviews"], rec["battle.defeat_xp_multiplier"]))
 
     def _wire_pacing(self):
-        self._pacing_last = {}
+        """The hint lines follow what you type; the values themselves only change
+        with Recalibrate progression speed (_recalibrate)."""
         for which in ("battle.daily_average", "battle.cards_per_round"):
             w = self.input_widgets.get(which)
             if isinstance(w, QLineEdit):
-                self._pacing_last[which] = w.text().strip()
                 w.textChanged.connect(self._update_pacing_hints)
-                w.editingFinished.connect(lambda k=which: self._on_pacing_edited(k))
         self._update_pacing_hints()
 
     def _wire_upgrade_choice(self):

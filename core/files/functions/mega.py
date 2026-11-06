@@ -318,7 +318,14 @@ def wild_drop(rng=None):
     Mega Stone you don't have yet. Returns that stone (the caller gives it), or None."""
     import random
     rng = rng or random
-    if _region() not in MILESTONE or not has_bracelet() or rng.random() >= WILD_DROP_CHANCE:
+    chance = WILD_DROP_CHANCE
+    # x2 once today's card goal is met (hidden)
+    try:
+        from ..wild import wild_rules
+        chance *= wild_rules.goal_bonus()
+    except Exception:
+        pass
+    if _region() not in MILESTONE or not has_bracelet() or rng.random() >= chance:
         return None
     pool = regular_pool()
     if not pool:

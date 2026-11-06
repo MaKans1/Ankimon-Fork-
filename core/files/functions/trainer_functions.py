@@ -152,6 +152,7 @@ def xp_share_gain_exp(logger, settings_obj, evo_window, main_pokemon_id, exp, xp
             pokemon.get("everstone", False),
             pokemon.get("friendship", 0),
             pokemon.get("evolution_rejected", False),
+            moves=pokemon.get("attacks"),
         )
         if friendship_evo_id is not None:
             # return_name_for_id can return None if the evolved id is missing

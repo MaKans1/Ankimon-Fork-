@@ -59,6 +59,7 @@
     "gym.leader_smart_moves": "Gym leaders battle smart. Off: they pick moves at random (much easier).",
     "gym.auto_battle": "Gym battles pick your moves for you. You can change this before each battle.",
     "gym.show_battle_log": "Show the gym battle log while you review.",
+    "gym.show_team_picker": "The \"Choose team for me\" button in the team picker. Off: you always pick your own three. It never appears in the Elite Four: Classic Gauntlet, only when you face the Elite Four and Champion one at a time. (Default: on)",
     "gym.decline_cooldown_reviews": "Cards to review before a gym is offered again after \"Not now\".",
     "battle.defeat_xp_multiplier": "EXP your Pokémon earn for defeating wild Pokémon. 1.0 = the main games' amount.",
     "battle.capture_xp_multiplier": "EXP for a catch, as a share of what defeating it would give (0.2 = a fifth, 0 = none).",

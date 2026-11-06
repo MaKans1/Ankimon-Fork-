@@ -794,6 +794,7 @@ class PokemonPC(QDialog):
                         "everstone": pokemon.get("everstone", False),
                         "evolution_rejected": pokemon.get("evolution_rejected", False),
                         "level": pokemon.get("level", 1),
+                        "attacks": pokemon.get("attacks"),
                     }
                 )
                 # Friendship/time evolution is behind a master toggle; its badges
@@ -1185,7 +1186,7 @@ class PokemonPC(QDialog):
             r = evolution_readiness({"id": p["id"], "friendship": p.get("friendship", 0),
                                      "everstone": False,
                                      "evolution_rejected": p.get("evolution_rejected", False),
-                                     "level": p.get("level", 1)})
+                                     "level": p.get("level", 1), "attacks": p.get("attacks")})
             if r.get("ready") and (r.get("method") == "level"
                                    or self.settings.get("evolution.friendship_time_enabled", True)):
                 return True

@@ -1,4 +1,15 @@
 # gyms: changelog
+## 2.8 (November 2026)
+- **Legendaries from phone reviews:** cards done on your phone can bring a roaming or rare legendary after a sync ("While exploring on mobile, a wild ... appeared!"); several line up one after another.
+- **Settings > Gyms > Display Choose Team for Me** (default on): turn it off to always pick your own three. The button never shows in the Elite Four: Classic Gauntlet, only when you face the Elite Four and Champion one at a time.
+- **Sacred Ash** at an Expedition camp revives every fainted team member at full HP.
+- **Scaled moves in boss fights:** in gym battles, the Elite Four, Champions and rematches, moves are only held back above the challenge's top level, so the scaled moves you set up for the next boss all work. Expeditions are unchanged.
+- **Elite Four:** hovering the gym counter lists everyone still to come, the Champion too, with their teams and the types to bring. In the Classic Gauntlet the team picker shows them all and **Choose team for me** is off (you pick the three yourself); one boss at a time, it works as for gyms.
+- **Choose team for me** gives each Pokémon a spread instead of four attacks: its hardest hitter against the leader's team, an attack that also does something (moves first, drains, or is likely to paralyse, burn or lower a stat) and two support moves that help in this fight (setting up, healing, a status the foes aren't immune to...). Where it can't learn those, more attacks fill the slots.
+- **Gym Rematches:** possible drops are listed stones first, then items, healing and TMs, A to Z within each, in two columns when the list is long.
+- **Gym counter:** reviews are counted straight from Anki's review log. The counter could run ahead of the log, and after a sync it sat at 0 for a while after a win.
+- **Choose team for me** only uses moves you could set up yourself: the moves a Pokémon knows, what Remember Attacks offers, and (ticked) the TMs you own that it can learn. It sometimes gave a move that newer games dropped from that Pokémon's level-up list.
+
 ## 2.7 (October 2026)
 - **Switching:** in manual battles, ⇄ Switch… (beside Dynamax / Tera / Z) shows your bench: a card per teammate still standing with its types, HP and moves, marked ▲ (super effective on the foe out now) or ▼ (not very effective). Click one, or press 1 or 2, to switch it in; that uses your turn. Greyed out while trapped or locked into a move (Outrage, Fly).
 - **Leaders switch too:** the Elite Four, Champions and every rematch, at most 3 times a battle with at least 5 of their moves between two, and only when looking ahead says the switch-in clearly does better. Gym leaders the first time round, totems, Titans, legendaries and expeditions never switch by choice.

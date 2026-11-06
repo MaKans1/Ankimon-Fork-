@@ -41,6 +41,7 @@ DEFAULT_CONFIG = {
     "gym.original_movesets": False,
     "gym.auto_battle": False,
     "gym.show_battle_log": True,
+    "gym.show_team_picker": True,
     "battle.automatic_battle": 3,
     "battle.cards_per_round": 2,
     "battle.daily_average": 100,

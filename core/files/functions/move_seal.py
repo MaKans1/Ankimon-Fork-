@@ -82,7 +82,8 @@ def fallback(species, level, n=4):
     """Its best level-up moves at this level (the last ones it would have learned),
     with at least one attack if it has any."""
     ls = _learnset(species)
-    known = sorted(((lv, m) for m, codes in ls.items() for lv in [_levelup(codes)] if lv and lv <= int(level)
+    known = sorted(((lv, m) for m, codes in ls.items() for lv in [_levelup(codes)]
+                    if lv is not None and lv <= int(level)              # 0 = learned on evolving
                     and required_level(species, m) <= int(level)),        # start moves follow the tiers too
                    key=lambda x: (x[0], x[1]))
     picks = [m for _lv, m in known][-n:]
@@ -129,7 +130,8 @@ def scaled_candidates(species, max_moves, cap):
     """Moves it may put in its scaled moveset at this cap: its level-up moves up to
     the cap and the moves it knows (TM ones too) - each one usable at the cap."""
     ls = _learnset(species)
-    lv_moves = sorted((lv, m) for m, codes in ls.items() for lv in [_levelup(codes)] if lv and lv <= int(cap))
+    lv_moves = sorted((lv, m) for m, codes in ls.items() for lv in [_levelup(codes)]
+                      if lv is not None and lv <= int(cap))             # 0 = learned on evolving (2026-11-04)
     out = []
     for m in [m for _lv, m in lv_moves] + [_id(x) for x in max_moves]:
         if m not in out and required_level(species, m) <= int(cap):

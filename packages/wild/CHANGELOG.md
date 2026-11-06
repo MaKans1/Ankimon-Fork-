@@ -1,4 +1,8 @@
 # wild: changelog
+## 2.8 (November 2026)
+- **Held items:** in the Pokémon window, the held item is a button. It lists the items in your bag that help that Pokémon, grouped by kind (power items, plates, type boosters, berries...) with the best first; items that wouldn't help it are left out. Equip swaps it in, and the old one goes back to the bag.
+- **Scaled moves** can come from up to the top level of the region's next challenge (the next boss's strongest Pokémon; in the Classic Elite Four, the Champion's), never above the Pokémon's own level. Wild battles still run at the level cap.
+
 ## 2.7 (October 2026)
 - **Travel menu:** each region shows its battle mechanic in colour beside its badge count: Mega Evolution and Primal in Hoenn, Mega Evolution in Kalos, Z-Moves in Alola, Dynamax in Galar, Terastal in Paldea.
 

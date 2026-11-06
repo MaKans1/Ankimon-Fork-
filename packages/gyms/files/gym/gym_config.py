@@ -20,6 +20,7 @@ DEFAULTS = {
     "gym.auto_battle": False,           # manual by default (user 2026-10-28)
     "gym.show_battle_log": True,
     "gym.elite_four_classic": True,
+    "gym.show_team_picker": True,       # the "Choose team for me" button (user 2026-11-04)
 }
 
 
@@ -85,6 +86,12 @@ def auto_battle() -> bool:
 
 def show_battle_log() -> bool:
     return get_bool("gym.show_battle_log")
+
+
+def show_team_picker() -> bool:
+    """Display Choose Team for Me (user 2026-11-04): off = always pick your own three.
+    Never shown in the Classic Elite Four Gauntlet either way (gym_ui)."""
+    return get_bool("gym.show_team_picker")
 
 
 def elite_four_classic() -> bool:

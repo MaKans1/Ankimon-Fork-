@@ -293,26 +293,81 @@ def roll(rng=random) -> bool:
         if expedition.is_active():
             return False
         region = _wild().region()
+        b = getattr(_wild(), "goal_bonus", lambda: 1)()  # x2 once today's card goal is met (hidden)
         here = roamers_here(region)
         rare = [i for i in here if (ROAMERS[i][2] or {}).get("rate") == "rare"]
         roam = [i for i in here if i not in rare]
-        if roam and rng.random() < ROAMER_RATE:
+        if roam and rng.random() < ROAMER_RATE * b:
             _pending = {"id": rng.choice(roam), "kind": "roamer", "region": region}
             return True
-        if rare and rng.random() < SPAWN_RATE:          # roams, but as rarely as Mewtwo
+        if rare and rng.random() < SPAWN_RATE * b:      # roams, but as rarely as Mewtwo
             _pending = {"id": rng.choice(rare), "kind": "roamer", "region": region}
             return True
         once = spawns_here(region)
-        if once and rng.random() < SPAWN_RATE:
+        if once and rng.random() < SPAWN_RATE * b:
             _pending = {"id": rng.choice(once), "kind": "spawn", "region": region}
             return True
-        again = again_here(region)
-        if again and rng.random() < SPAWN_RATE:          # a legendary you've caught, again
+        again = again_here(region)                       # caught roamers join these (user 2026-11-02)
+        if again and rng.random() < SPAWN_RATE * b:      # a legendary you've caught, again
             _pending = {"id": rng.choice(again), "kind": "spawn", "region": region}
             return True
     except Exception as e:
         _log("warning", "roll skipped: %s" % e)
     return False
+
+
+# -------------------------------------------------------- phone reviews --
+_queue = []                     # encounters found on the phone, waiting their turn
+
+
+def roll_many(n, rng=random):
+    """Phone reviews (functions/mobile_finds.py, user 2026-11-05): `n` would-be
+    encounters in the region you're in, each rolled like a desktop one (roll).
+    Every hit counts, but each Pokemon turns up once."""
+    try:
+        if int(n) <= 0 or not _ui().CFG.enabled():
+            return []
+        region = _wild().region()
+        b = getattr(_wild(), "goal_bonus", lambda: 1)()
+        here = roamers_here(region)
+        rare = [i for i in here if (ROAMERS[i][2] or {}).get("rate") == "rare"]
+        roam = [i for i in here if i not in rare]
+        once, again = spawns_here(region), again_here(region)
+    except Exception as e:
+        _log("warning", "phone rolls skipped: %s" % e)
+        return []
+    out, seen = [], set()
+    for _ in range(int(n)):
+        if roam and rng.random() < ROAMER_RATE * b:
+            e = {"id": rng.choice(roam), "kind": "roamer"}
+        elif rare and rng.random() < SPAWN_RATE * b:
+            e = {"id": rng.choice(rare), "kind": "roamer"}
+        elif once and rng.random() < SPAWN_RATE * b:
+            e = {"id": rng.choice(once), "kind": "spawn"}
+        elif again and rng.random() < SPAWN_RATE * b:
+            e = {"id": rng.choice(again), "kind": "spawn"}
+        else:
+            continue
+        if e["id"] not in seen:
+            seen.add(e["id"])
+            e["region"] = region
+            out.append(e)
+    return out
+
+
+def queue(entries):
+    """Line up the phone's encounters: the usual offer for each, one after another."""
+    for e in entries or []:
+        _queue.append(dict(e, mobile=True))
+    _next(1500)
+
+
+def _next(delay=4000):
+    global _pending
+    if _pending is None and not _offering and _queue:
+        _pending = _queue.pop(0)
+    if _pending is not None and not _offering:
+        QTimer.singleShot(int(delay), _offer)
 
 
 # ---------------------------------------------------------------- offer --
@@ -456,9 +511,10 @@ def _offer():
         hurt = getattr(g, "legend_hp", 1.0) < 1.0
         r = QMessageBox.question(
             mw, "A powerful Pokémon!",
-            "A wild %s appeared!%s It's very strong (Lv %d)%s.\n\n"
+            "%s %s appeared!%s It's very strong (Lv %d)%s.\n\n"
             "Battle it with three of your Pokémon? Beat it to catch it. "
-            "If you don't, it flees." % (g.leader, " And it's SHINY!" if getattr(g, "legend_shiny", False) else "",
+            "If you don't, it flees." % ("While exploring on mobile, a wild" if entry.get("mobile") else "A wild",
+                                        g.leader, " And it's SHINY!" if getattr(g, "legend_shiny", False) else "",
                                         g.team[0].level,
                                         " - still hurt from your last meeting" if hurt else ""),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -469,6 +525,7 @@ def _offer():
         _log("error", "legend offer failed: %s" % e)
     finally:
         _offering = False
+        _next()                         # the next one found on the phone, if any
 
 
 def _fled(g):

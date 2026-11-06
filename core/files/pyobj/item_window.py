@@ -106,8 +106,7 @@ class ItemWindow(QWidget):
             'dusk-ball': 11,      # Increased chance at night or in caves
             'great-ball': 12,     # Increased catch rate (original was 9, now 12)
             'heal-ball': 12,      # Same as a Poké Ball but heals the Pokémon
-            'iron-ball': 12,      # Used for Steel-type Pokémon, 1.5x chance
-            'light-ball': 1,      # Not actually used for catching Pokémon; it's an item
+            # (Iron Ball and Light Ball are held items - 2026-11-03: they showed a greyed "Throw")
             'luxury-ball': 12,    # Same as a Poké Ball but increases happiness
             'master-ball': 100,   # Guarantees a successful catch (100% chance)
             'nest-ball': 12,      # Works better on lower-level Pokémon
@@ -117,7 +116,6 @@ class ItemWindow(QWidget):
             'quick-ball': 13,     # High chance if used at the start of battle
             'repeat-ball': 12,    # Higher chance on Pokémon that have been caught before
             'safari-ball': 8,     # Used in Safari Zone, with a fixed catch rate
-            'smoke-ball': 1,      # Used to flee from wild battles, no catch chance
             'timer-ball': 13,     # Higher chance the longer the battle goes
             'ultra-ball': 13      # Increased catch rate (original was 10, now 13)
         }
@@ -235,6 +233,8 @@ class ItemWindow(QWidget):
             self.contentLayout.addWidget(empty_label, 1, 1)
             return
 
+        by_desc = []                            # items found by their description (shown last)
+        by_mon = []                             # items for the Pokemon the search names
         try:
             # Filter items based on category index
             if category_index == 1:  # Fossils
@@ -262,8 +262,10 @@ class ItemWindow(QWidget):
                 battle = set(self.X_ITEMS) | set(self.CURES) | set(self.REVIVES) | set(self.PP_ITEMS)
                 filtered_items = [item for item in filtered_items if item.get("item") in battle]
 
-            # Now filter by search
-            filtered_items = list(filter(lambda item: search_text in item["item"].lower(), filtered_items))
+            # Now filter by search: names first, then items for a Pokemon named exactly that ("eevee":
+            # its evolution stones), then descriptions that mention it (user 2026-11-04)
+            by_name, by_mon, by_desc = self._search_split(search_text, filtered_items)
+            filtered_items = by_name + by_mon + by_desc
         except Exception as e:
             filtered_items = []
             self.logger.log_and_showinfo("error", f"Error filtering items: {e}")
@@ -273,7 +275,21 @@ class ItemWindow(QWidget):
             self.contentLayout.addWidget(empty_label, 1, 1)
             return
 
-        for item in filtered_items:
+        said = " ".join(search_text.split()).replace("&", "&amp;").replace("<", "&lt;")
+        heads = {}                              # headings over the Pokemon's items and the description matches
+        if by_mon:
+            mon = str(getattr(self, "_search_mon_name", "") or said).replace("&", "&amp;").replace("<", "&lt;")
+            heads[len(filtered_items) - len(by_desc) - len(by_mon)] = "Items for %s" % mon
+        if by_desc:
+            heads[len(filtered_items) - len(by_desc)] = "Descriptions that mention \"%s\"" % said
+        for n, item in enumerate(filtered_items):
+            if n in heads:
+                if col:
+                    row, col = row + 1, 0
+                head = QLabel("<b>%s</b>" % heads[n])
+                head.setContentsMargins(0, 10, 0, 2)
+                self.contentLayout.addWidget(head, row, 0, 1, max_items_per_row)
+                row += 1
             try:
                 item_widget = self.ItemLabel(item["item"], item["quantity"], item.get("type"))
                 item_widget.setMinimumWidth(180)
@@ -284,6 +300,98 @@ class ItemWindow(QWidget):
                     col = 0
             except Exception as e:
                 self.logger.log("error", f"Skipping invalid item '{item}': {e}")
+
+    def _search_split(self, text, items):
+        """Bag search -> (name matches, items for the Pokemon it names, description-only
+        matches). Names and descriptions match at the start of a word: "ice" finds
+        Never-Melt Ice and Ice-type items, not Berry Juice or "price"; "nev" finds
+        Never-Melt Ice. Names starting with it come first. A Pokemon's exact name
+        ("eevee", "mr mime") also lists the items that evolve it or evolve into it, and
+        its Mega Stones (user 2026-11-04)."""
+        import re
+        t = " ".join(str(text or "").lower().replace("-", " ").split())
+        self._search_mon_name = ""
+        if not t:
+            return list(items), [], []
+        word = re.compile(r"(?<![a-z0-9])" + re.escape(t))
+        cache = self.__dict__.setdefault("_search_desc", {})
+        mon = self._search_mon(t)
+        by_name, by_mon, by_desc = [], [], []
+        for item in items:
+            name = str(item.get("item") or "").lower().replace("-", " ")
+            if word.search(name):
+                by_name.append(item)
+                continue
+            if mon and item.get("type") != "TM" and self._item_for_mon(item.get("item"), mon):
+                by_mon.append(item)
+                continue
+            key = (item.get("item"), item.get("type"))
+            if key not in cache:
+                try:
+                    d = self._item_tooltip(*key)
+                except Exception:
+                    d = ""
+                d = re.sub(r"<[^>]+>", " ", str(d or "")).replace("&nbsp;", " ").lower().replace("-", " ")
+                cache[key] = " ".join(d.split())
+            if word.search(cache[key]):
+                by_desc.append(item)
+        by_name.sort(key=lambda it: not str(it.get("item") or "").lower().replace("-", " ").startswith(t))
+        return by_name, by_mon, by_desc
+
+    def _search_mon(self, t):
+        """(dex number, ids of the items that evolve it or evolve into it, name) when the
+        search is a Pokemon's exact name, else None. The same evolution rows the Evolve
+        button uses (_item_evo_target), so trade and held-item evolutions count too."""
+        import re
+        key = re.sub(r"[^a-z0-9]", "", str(t).lower())
+        memo = self.__dict__.setdefault("_search_mons", {})
+        if key not in memo:
+            mon = None
+            try:
+                from ..functions.pokedex_functions import (_load_pokedex_cache, _load_poke_species_cache,
+                                                           pokemon_evolves_from_id, get_pokemon_item_evolution_rows)
+                entry = (_load_pokedex_cache() or {}).get(key) if len(key) >= 3 else None
+                dex = int((entry or {}).get("species_id") or (entry or {}).get("num") or 0)
+                if dex > 0:
+                    pre = int(((_load_poke_species_cache() or {}).get(dex) or {}).get("evolves_from_species_id") or 0)
+                    evos = [int(e) for e in (pokemon_evolves_from_id(dex) or [])] + ([dex] if pre else [])
+                    ids = set()
+                    for evo in evos:
+                        for d in get_pokemon_item_evolution_rows(evo):
+                            trig = str(d.get("evolution_trigger_id") or "")
+                            if trig == "3":
+                                ids.add(str(d.get("trigger_item_id") or ""))
+                            elif trig == "2":
+                                ids.add(str(d.get("held_item_id") or ""))
+                    ids.discard("")
+                    ids.discard("None")
+                    mon = (dex, ids, str(entry.get("name") or key.title()))
+            except Exception:
+                mon = None
+            memo[key] = mon
+        mon = memo[key]
+        self._search_mon_name = mon[2] if mon else ""
+        return mon
+
+    def _item_for_mon(self, item_name, mon) -> bool:
+        """An item that evolves this Pokemon, evolves into it, or is its Mega Stone."""
+        name = str(item_name or "").lower()
+        try:
+            from ..functions import mega
+            st = mega.stones().get(name)
+            if st:
+                return int(st.get("species") or 0) == mon[0]
+        except Exception:
+            pass
+        if not mon[1]:
+            return False
+        ids = self.__dict__.setdefault("_search_item_ids", {})
+        if name not in ids:
+            try:
+                ids[name] = str(return_id_for_item_name(name) or "")
+            except Exception:
+                ids[name] = ""
+        return bool(ids[name]) and ids[name] in mon[1]
 
     def give_held_item(self, comboBox, item_name):
         individual_id = comboBox.itemData(comboBox.currentIndex(), role=UserRole)
@@ -323,7 +431,7 @@ class ItemWindow(QWidget):
              "heal-powder": None, "cheri-berry": ("par",), "chesto-berry": ("slp",),
              "pecha-berry": ("psn", "tox"), "rawst-berry": ("brn",), "aspear-berry": ("frz",),
              "lum-berry": None, "persim-berry": ("confusion",)}
-    REVIVES = ("revive", "max-revive", "revival-herb")
+    REVIVES = ("revive", "max-revive", "revival-herb", "sacred-ash")      # Sacred Ash: the whole team
     PP_ITEMS = ("ether", "max-ether", "elixir", "max-elixir", "leppa-berry")
     X_ITEMS = {"x-attack": "attack_boost", "x-defense": "defense_boost", "x-sp-atk": "special_attack_boost",
                "x-sp-def": "special_defense_boost", "x-speed": "speed_boost", "x-accuracy": "accuracy_boost",
@@ -371,6 +479,8 @@ class ItemWindow(QWidget):
                 d = get_id_and_description_by_item_name(item_name)
             except Exception:
                 d = None
+            if isinstance(d, tuple):            # (None, None) on a miss: it showed as text
+                d = d[1]
         return str(d or item_name.replace("-", " ").title())
 
     def _action_button(self, text, enabled=True, why="", fn=None):
@@ -442,7 +552,8 @@ class ItemWindow(QWidget):
             return out
         if item in self.REVIVES:
             fainted = self._fainted_teammates()
-            return [self._action_button("Revive a teammate", bool(fainted),
+            return [self._action_button("Revive your whole team" if item == "sacred-ash" else "Revive a teammate",
+                                        bool(fainted),
                                         "" if fainted else "No team member has fainted in this battle. "
                                         "(Revives also work between Expedition floors.)",
                                         lambda: self._use_revive(item))]
@@ -556,6 +667,15 @@ class ItemWindow(QWidget):
             rec = mw.ankimon_db.get_pokemon(iid) or {}
             entries.append({"key": iid, "label": "%s  Lv %s" % (_pname(rec.get("name")), rec.get("level", "?")),
                             "enabled": True})
+        if item == "sacred-ash":                # every fainted team member at once (2026-11-03)
+            if not W or not fainted:
+                return
+            for iid in fainted:
+                W.STATE.fainted.discard(iid)
+            mw.ankimon_db.update_item_quantity(item, -1)
+            self.logger.log_and_showinfo("info", "Your whole team is ready to battle again.")
+            self.renewWidgets()
+            return
         key = self._pick("Revive", entries, "Revive which team member?")
         if not key or not W:
             return

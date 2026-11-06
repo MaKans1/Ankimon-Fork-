@@ -1,6 +1,25 @@
 # Core: general patches (changelog)
 
 Bug fixes and quality-of-life changes on top of Ankimon 2.03. The core is always installed; the big systems (gyms, wild, showdown) are separate packages.
+## 2.8 (November 2026)
+- **Friendship comes from reviews:** your buddy gains 1 friendship for every 2 cards you review, like training points, instead of 5-9 for every wild Pokémon it beats or catches (a new buddy reached 160 in about half a day). Friendship already earned is kept.
+- **Phone reviews find things too:** after a sync brings in cards you did on your phone, Ankimon works out the wild encounters they would have been and rolls each one. A shiny turns up as "While adventuring on mobile, you encountered this shiny ...!" (a non-legendary Pokémon from your region joins you); with the gyms package, legendaries turn up as the usual battle offer.
+- **Bag search, Pokemon names:** searching a Pokemon's name ("eevee") also lists, under "Items for Eevee", the items you own that evolve it or evolve into it, and its Mega Stones.
+- **Evolution arrows:** a Pokemon with more than one evolution (Eevee, Gloom, Slowpoke...) gets arrows either side of the pink evolution box in its details: click through each evolution's requirement, A-Z.
+- **Sylveon:** Eevee now evolves into Sylveon as in Sword/Shield and Scarlet/Violet: 160 friendship while it knows a Fairy-type move (Baby-Doll Eyes Lv 15, Charm Lv 45 or a TM), day or night. It comes before Espeon and Umbreon. Eevee's details explain it.
+- **Scaled moves:** moves a Pokemon learns when it evolves (Scizor's Bullet Punch...) now show up in its scaled moveset choices.
+- **Bag search:** searching a word like "fire" or "psychic" lists items with it in their name first, then, under "Descriptions that mention ...", items whose description mentions it (Charcoal, Flame Plate, Occa Berry, Fire-type TMs...).
+- **Move evolutions:** Pokémon that evolve by levelling up knowing a move (Ambipom, Mamoswine, Dudunsparce, Hydrapple and the rest) now evolve at a set level, no move needed, like trade evolutions: the level the move is learned at, never earlier than Lv 16 for a first evolution or Lv 30 for a second.
+- **Item descriptions** for Peat Block, Black Augurite, the Charcadet armors, Metal Alloy, Syrupy Apple and both Teacups.
+- **Sacred Ash** revives your whole team. **Light Ball** and **Iron Ball** can be held (they were treated as Poké Balls).
+- **Fewer useless items:** Amulet Coin, Cleanse Tag, Escape Rope, Exp. Share, Luck and Pure Incense, Pass Orb, Poké Doll, Poké Toy, Smoke Ball and the Relics are no longer sold or found.
+- Peat Block and Black Augurite found in the wild could land in the bag under a name that hovering and evolving didn't recognize.
+- **Ankimon Mart:** full item names with an Owned count under each, plain buy buttons that buy one with a click (no pop-up), and text, icons and buttons that shrink so every item fits the window. The window remembers its size.
+- **Sell Duplicate Items** in the Mart sells the spares of items that are never used up (evolution items, held items, TMs, Mega Stones...) for half their price and keeps one of each. It lists them first. Potions, berries, balls and fossils are never counted.
+- **Shiny wild Pokémon** are more common.
+- **Rare wild Pokémon** no longer turn up almost twice as often once your trainer level passes 10 (a leftover rule from the original Ankimon).
+- **Recalibrate progression speed** in Settings, under the daily card goal: sets the gym interval, the waits after a loss or "Not now" and the EXP multiplier for your goal, and saves them.
+
 ## 2.7 (October 2026)
 - **Mega Evolution, once a day:** with the Mega Bracelet, use a Mega Stone from the bag (Evolution Items) on a matching Pokémon. It stays a Mega until Anki's next day change, in every fight and every region. One Mega a day; stones are never used up.
   - **Wild battles:** a Mega fights with its Mega stats, types and ability, a few levels above the region's level cap (never above its own level), and shows its Mega sprite.

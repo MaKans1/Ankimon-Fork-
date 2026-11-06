@@ -122,6 +122,13 @@ from .battle_loop import on_review_card, init_battle_state
 init_battle_state(collected_pokemon_ids)
 gui_hooks.reviewer_did_answer_card.append(on_review_card)
 
+# --- Phone reviews: the shinies and legendaries you'd have met (user 2026-11-05) ---
+try:
+    from .functions import mobile_finds
+    mobile_finds.setup()
+except Exception as _e:
+    print("Ankimon mobile finds:", _e)
+
 # --- Menu ---
 create_menu_actions(
     database_complete,

@@ -77,6 +77,53 @@ def _lookup_move_data(attack: str):
     return find_details_move("tackle")
 
 
+def _evo_cycler(pages, live_widget, live_id, font):
+    """<- pink box -> (user 2026-11-04): one page per evolution, A-Z, each with its
+    requirement; the arrows wrap round. The evolution the box was already about keeps
+    that widget (live friendship text or the Evolve now button) and opens first."""
+    from PyQt6.QtWidgets import QStackedWidget, QToolButton, QWidget, QHBoxLayout, QLabel
+    if live_widget is not None and not any(live_id is not None and int(p["id"]) == int(live_id) for p in pages):
+        return live_widget                      # can't place it: leave the box as it was
+    stack = QStackedWidget()
+    stack.setFixedWidth(230)
+    start = 0
+    for i, p in enumerate(pages):
+        if live_widget is not None and int(p["id"]) == int(live_id):
+            w, start = live_widget, i
+        else:
+            w = QLabel(str(p["text"]).replace("\u00e9", "e").replace("\u00c9", "E"))
+            w.setFont(font)
+            w.setWordWrap(True)
+            w.setFixedWidth(230)
+            w.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            w.setStyleSheet("color: #FF69B4;")
+        stack.addWidget(w)
+    stack.setCurrentIndex(start)
+    n = len(pages)
+
+    def arrow(text, step, tip):
+        b = QToolButton()
+        b.setText(text)
+        b.setAutoRaise(True)
+        b.setToolTip(tip)
+        b.setCursor(Qt.CursorShape.PointingHandCursor)
+        b.setStyleSheet("QToolButton { color: #FF69B4; border: none; font-size: 16px; padding: 0 2px; }"
+                        " QToolButton:hover { color: #FF8DC7; }")
+        b.clicked.connect(lambda _=False: stack.setCurrentIndex((stack.currentIndex() + step) % n))
+        return b
+
+    box = QWidget()
+    lay = QHBoxLayout(box)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setSpacing(2)
+    lay.addStretch(1)
+    lay.addWidget(arrow("\u25c0", -1, "Previous evolution (A-Z)"), 0, Qt.AlignmentFlag.AlignVCenter)
+    lay.addWidget(stack)
+    lay.addWidget(arrow("\u25b6", 1, "Next evolution (A-Z)"), 0, Qt.AlignmentFlag.AlignVCenter)
+    lay.addStretch(1)
+    return box
+
+
 def PokemonCollectionDetails(
     name: str,
     level: int,
@@ -118,6 +165,7 @@ def PokemonCollectionDetails(
                 "everstone": everstone,
                 "evolution_rejected": evolution_rejected,
                 "level": level,
+                "attacks": attacks,
             }
         )
         lang_name = _cap1(get_pokemon_diff_lang_name(int(id), language))
@@ -439,6 +487,18 @@ def PokemonCollectionDetails(
         TopL_layout_Box.addWidget(ability_label)
         TopL_layout_Box.addWidget(captured_date_label)
         TopL_layout_Box.addWidget(pokemon_defeated_label)
+        # Several evolutions (Eevee...): arrows either side of the pink box page through each
+        # one's requirement, A-Z (user 2026-11-04)
+        if not everstone:
+            try:
+                from ..functions.details_info import evolution_pages
+                _pages = evolution_pages(id, level, friendship, friendship_time_enabled, attacks)
+            except Exception:
+                _pages = []
+            if len(_pages) > 1:
+                _live = show_evolution_ui and (readiness["ready"] or bool(readiness["status_text"]))
+                evolution_req_widget = _evo_cycler(_pages, evolution_req_widget if _live else None,
+                                                   readiness.get("evo_id"), custom_font)
         if evolution_req_widget is not None:
             TopL_layout_Box.addWidget(evolution_req_widget)
         if evolution_note_widget is not None:

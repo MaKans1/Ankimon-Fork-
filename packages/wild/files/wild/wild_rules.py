@@ -116,6 +116,32 @@ def _settings():
     return settings_obj
 
 
+# ------------------------------------------------ daily goal bonus (hidden) --
+# Once today's daily card goal is met, rare finds are twice as likely: shinies,
+# legendaries, wild starters, Kubfu, the rare spawn tiers and Mega Stone finds
+# (user 2026-11-02). Never shown to the player.
+GOAL_BONUS = 2
+_GOAL_MET = {"cutoff": None}
+
+
+def goal_bonus() -> int:
+    """GOAL_BONUS once today's reviews reach the daily card goal, else 1."""
+    try:
+        from aqt import mw
+        cutoff = int(mw.col.sched.day_cutoff)
+        if _GOAL_MET["cutoff"] == cutoff:
+            return GOAL_BONUS                    # met earlier today
+        goal = max(1, int(_settings().get("battle.daily_average") or 100))
+        done = int(mw.col.db.scalar("SELECT count() FROM revlog WHERE id >= ? AND type IN (0, 1, 2, 3)",
+                                    (cutoff - 86400) * 1000) or 0)
+        if done >= goal:
+            _GOAL_MET["cutoff"] = cutoff
+            return GOAL_BONUS
+    except Exception:
+        pass
+    return 1
+
+
 def _flag(v, default=True):
     if v is None:
         return default
@@ -409,6 +435,36 @@ def level_cap(reg=None):
         return max(2, int(round(d[0]))) if d else cap
     except Exception:
         return None
+
+
+def move_cap(reg=None):
+    """Highest level a scaled move may come from here (user 2026-11-03): the top
+    of the next challenge - the next boss's strongest Pokemon, or in the Classic
+    Elite Four the whole run's (the Champion's). Never below level_cap(); None
+    while level_cap() is None."""
+    cap = level_cap(reg)
+    if cap is None:
+        return None
+    try:
+        from ..gym import gym_config, gym_data
+        nxt = gym_data.next_gym(_defeated(), reg or region())
+        if nxt is not None:
+            run = [nxt]
+            if nxt.is_elite and gym_config.elite_four_classic():
+                run = gym_data.elite_run(nxt) or [nxt]
+            return max(cap, max(gym_data.ace_level(g) for g in run))
+    except Exception:
+        pass
+    return cap
+
+
+def scaled_cap(real, reg=None):
+    """The level a Pokemon's scaled moves come from: move_cap(), never above its
+    own level. None while no cap holds it down (its own level <= level_cap())."""
+    cap = level_cap(reg)
+    if not cap or int(real) <= cap:
+        return None
+    return min(int(real), move_cap(reg) or cap)
 
 
 def mega_level(pobj):
@@ -827,7 +883,7 @@ def fight_moves(main_pokemon, ticked=False):
             rec = dict(mw.ankimon_db.get_pokemon(iid) or {})
             rec.setdefault("name", getattr(main_pokemon, "name", ""))
             rec["level"], rec["attacks"] = real, rec.get("attacks") or attacks
-            moves, changed = move_seal.scaled_moves(rec, region(), cap)
+            moves, changed = move_seal.scaled_moves(rec, region(), scaled_cap(real) or cap)
             if changed and rec.get("individual_id"):
                 sm = dict(rec.get("scaled_moves") or {})
                 sm[region()] = moves
@@ -994,14 +1050,14 @@ def eat_herba() -> int:
 
 def shiny_boost() -> int:
     """Shiny multiplier for the wild Pokemon being made now (counts it down)."""
-    mult = 1
+    mult = goal_bonus()                          # x2 once today's card goal is met (hidden)
     if STATE.kubfu:                              # a Kubfu: twice as likely
         STATE.kubfu = False
         try:
             from ..gym import galar
-            mult = int(galar.KUBFU_SHINY)
+            mult *= int(galar.KUBFU_SHINY)
         except Exception:
-            mult = 2
+            mult *= 2
     left = sparkle_left()
     if left <= 0:
         return mult
@@ -1375,7 +1431,7 @@ def special_spawn(rng=random):
         return _paradox(rng)
     try:                                         # Kubfu: Galar, once one has joined you
         from ..gym import galar
-        if region() == "Galar" and galar.kubfu_joined() and rng.random() < galar.KUBFU_RATE:
+        if region() == "Galar" and galar.kubfu_joined() and rng.random() < galar.KUBFU_RATE * goal_bonus():
             STATE.kubfu = True
             return {"id": galar.KUBFU, "tier": "Legendary"}
     except Exception:
@@ -1387,10 +1443,10 @@ def special_spawn(rng=random):
     except Exception:
         pass
     try:
-        if legends is None and rng.random() < MEWTWO_RATE and mewtwo_status()[0]:
+        if legends is None and rng.random() < MEWTWO_RATE * goal_bonus() and mewtwo_status()[0]:
             return {"id": MEWTWO_ID, "tier": "Legendary", "level": MEWTWO_LEVEL,
                     "moves": LEGEND_SETS.get(MEWTWO_ID) or legendary_moves("mewtwo", MEWTWO_LEVEL)}
-        if rng.random() < STARTER_RATE:
+        if rng.random() < STARTER_RATE * goal_bonus():
             pool = starter_pool()
             if pool:
                 return {"id": rng.choice(pool), "tier": "Normal"}

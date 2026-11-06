@@ -252,14 +252,69 @@ def brief_lines(gym) -> List[str]:
     return lines
 
 
+def classic_elite(gym) -> bool:
+    """A Classic Elite Four fight: one team for every member still to come and
+    the Champion, back to back (_finish chains them)."""
+    try:
+        return bool(gym.is_elite and CFG.elite_four_classic() and not getattr(gym, "is_rematch", False)
+                    and not getattr(gym, "is_test", False) and not getattr(gym, "is_legend", False))
+    except Exception:
+        return False
+
+
+def classic_run(gym) -> list:
+    """The bosses one team fights back to back from here (gym_data.elite_run) in
+    Classic Elite Four; just [gym] otherwise."""
+    if classic_elite(gym):
+        try:
+            from .gym_data import elite_run
+            return elite_run(gym) or [gym]
+        except Exception:
+            pass
+    return [gym]
+
+
+def challenge_top(gym):
+    """The highest level in this challenge - the boss's, or the whole Classic
+    Elite Four run's: scaled moves reach it and only moves above it are sealed
+    (user 2026-11-03; rematches too). None for legendaries and tests."""
+    if getattr(gym, "is_legend", False) or getattr(gym, "is_test", False):
+        return None
+    try:
+        return max(GB.boss_level(g) or 0 for g in classic_run(gym)) or None
+    except Exception:
+        return None
+
+
+def run_lines(gyms) -> List[str]:
+    """One block per boss - who, their team, the types to bring - for the Elite
+    Four hover card and team picker (user 2026-11-02)."""
+    out = []
+    for g in gyms:
+        rec = recommended_types(g)
+        out.append("<b>%s</b> — %s specialist<br>%s%s" % (
+            g.leader, g.type_theme, ", ".join("%s Lv%d" % (m.species, m.level) for m in g.team),
+            ("<br><b>Recommended:</b> " + ", ".join(rec)) if rec else ""))
+    return out
+
+
 def progress_tip() -> str:
     """brief_lines for whoever the HUD counter is counting toward, as one
-    HTML block ("" when the counter isn't about a gym)."""
+    HTML block ("" when the counter isn't about a gym). The Elite Four: everyone
+    still to come, the Champion too (user 2026-11-02)."""
     try:
         if not CFG.enabled() or gym_is_active():
             return ""
         gym = next_gym(progress().defeated_ids())
-        return "<br>".join(brief_lines(gym)) if gym is not None else ""
+        if gym is None:
+            return ""
+        if gym.is_elite:
+            from .gym_data import elite_run
+            run = elite_run(gym) or [gym]
+            head = ("<b>Classic Elite Four:</b> one team of three for all %d, back to back" % len(run)
+                    if classic_elite(gym) else "<b>Coming up:</b>")
+            return "<br><br>".join([head] + run_lines(run))
+        return "<br>".join(brief_lines(gym))
     except Exception:
         return ""
 
@@ -273,7 +328,10 @@ class TeamSelectDialog(QDialog):
         self.selected: List[dict] = []
         lay = QVBoxLayout(self)
 
-        for line in brief_lines(gym):
+        run = classic_run(gym)                  # Classic Elite Four: this team fights them all
+        head = (["<b>Classic Elite Four:</b> these three fight all %d in a row, healed between "
+                 "fights." % len(run)] + run_lines(run)) if len(run) > 1 else brief_lines(gym)
+        for line in head:
             lab = QLabel(line)
             lab.setWordWrap(True)
             lay.addWidget(lab)
@@ -304,14 +362,18 @@ class TeamSelectDialog(QDialog):
 
         self.gym = gym
         pick = QPushButton("Choose team for me")
-        pick.setToolTip("Picks three from your whole PC, with their best moves for this fight "
-                        "(this fight only), and starts the battle.")
+        pick.setToolTip("Results may vary")          # user 2026-11-02
         pick.clicked.connect(self._autopick)
         lay.addWidget(pick)
         self.use_tms = QCheckBox("Use my TMs for better moves?")
         self.use_tms.setToolTip("Lets Choose team for me give a Pokémon a move from a TM you own, "
                                 "for this fight. TMs aren't used up.")
         lay.addWidget(self.use_tms)
+        # Display Choose Team for Me (user 2026-11-04): off = no button; never in the Classic
+        # gauntlet (picked by hand, user 2026-11-02) - only one boss at a time
+        if classic_elite(gym) or not CFG.show_team_picker():
+            pick.setVisible(False)
+            self.use_tms.setVisible(False)
 
         self.auto = QCheckBox("Auto-battle (moves chosen for me)")
         self.auto.setChecked(CFG.auto_battle())
@@ -541,7 +603,8 @@ def start_gym(gym, reuse_selection: bool = False) -> bool:
         import copy as _copy
         gym = _copy.copy(gym)
         gym.tera_rolled = _tr.roll_ace_type(gym.tera)
-    player = GB.build_player_team(selection, GB.boss_level(gym))     # fight at the boss's level
+    player = GB.build_player_team(selection, GB.boss_level(gym),     # fight at the boss's level,
+                                  challenge_top(gym))                # moves up to the challenge's top
     if getattr(gym, "test_mech", "") in ("tera", "titan"):
         # Game > Test Tera: anyone holding nothing gets a Tera Shard of a random
         # type for this battle only
@@ -725,7 +788,6 @@ def handle_review(review_count: int = 0):
     """
     try:
         ensure_menu()
-        _bump_reviews()
         try:
             from . import rematch as _rm
             _rm.on_review()             # small "rematch ready" notice
@@ -798,7 +860,7 @@ def open_gym_manually():
     start_gym(gym)
 
 
-_life_cache: Optional[int] = None
+_count_warned = False
 
 
 def _current_reviews() -> int:
@@ -810,40 +872,33 @@ def _current_reviews() -> int:
     backwards each night and could never be crossed reliably; that is what
     made rematch look broken even with the retry cost set to 1.
 
-    revlog only ever grows, so thresholds stay meaningful across days.
+    The log grows with every card, so thresholds stay meaningful across days.
+    It is counted fresh every time (user 2026-10-30): a +1-per-answer cache ran
+    ~10% ahead of the log (answers that don't stay in it still counted), so a win
+    was saved ahead of the real count and the next sync pulled the clock back
+    below it - the counter sat at 0 after the win. COUNT() takes well under 1 ms.
     """
-    global _life_cache
-    if _life_cache is not None:
-        return max(0, _life_cache - _baseline())
+    global _count_warned
     try:
-        _life_cache = int(mw.col.db.scalar("select count() from revlog") or 0)
+        raw = int(mw.col.db.scalar("select count() from revlog") or 0)
     except Exception as e:
-        _log("warning", "revlog count failed, falling back to daily: %s" % e)
+        if not _count_warned:
+            _count_warned = True
+            _log("warning", "revlog count failed, falling back to daily: %s" % e)
         try:
             from ..singletons import ankimon_tracker_obj
-            _life_cache = int(ankimon_tracker_obj.get_total_reviews())
+            raw = int(ankimon_tracker_obj.get_total_reviews())
         except Exception:
-            _life_cache = 0
-    return max(0, _life_cache - _baseline())
+            raw = 0
+    return max(0, raw - _baseline(raw))
 
 
-def _baseline() -> int:
+def _baseline(raw: int = 0) -> int:
     """Reviews already logged when the ladder started. Recorded once."""
     try:
-        raw = _life_cache if _life_cache is not None else 0
         return progress().baseline(raw)
     except Exception:
         return 0
-
-
-def _bump_reviews():
-    """handle_review fires once per answered card, so a counted increment
-    stays exact without re-running COUNT() on every single card."""
-    global _life_cache
-    if _life_cache is None:
-        _current_reviews()
-    else:
-        _life_cache += 1
 
 
 def _dn(n):
@@ -866,16 +921,6 @@ def _unown_suffix(p):
 
 
 # Phone reviews (user 2026-10-26): cards done in AnkiMobile / AnkiDroid reach the
-# review log with a sync. The lifetime count is cached per session, so count the
-# log again after every sync - they then count toward the next gym, rematches and
-# the region clock (battles, XP and training points stay desktop-only).
-def _on_sync_finished(*_args):
-    global _life_cache
-    _life_cache = None
-
-
-try:
-    from aqt import gui_hooks as _gh
-    _gh.sync_did_finish.append(_on_sync_finished)
-except Exception as _e:
-    _log("warning", "sync hook not added: %s" % _e)
+# review log with a sync, and the count is read fresh from the log, so they count
+# toward the next gym, rematches and the region clock (battles, XP and training
+# points stay desktop-only).
