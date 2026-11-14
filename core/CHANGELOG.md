@@ -1,6 +1,10 @@
 # Core: general patches (changelog)
 
 Bug fixes and quality-of-life changes on top of Ankimon 2.03. The core is always installed; the big systems (gyms, wild, showdown) are separate packages.
+## 2.8.1 (November 2026)
+- **Sharper Mega sprites:** 67 Mega and Primal Pokémon now have hand-drawn sprites in the same pixel style as every other Pokémon (front, back and shiny), from the Smogon Sprite Project, instead of the blurry ones. Your own Mega now shows a real back sprite in battle, and shiny Megas look shiny. Animated Megas are unchanged.
+- **Shiny sprites everywhere:** shiny Pokémon (and female and Unown-letter ones) now show their own sprite in the team slots, the evolution screens and the catch-or-release window after a wild battle, not the regular one.
+
 ## 2.8 (November 2026)
 - **Friendship comes from reviews:** your buddy gains 1 friendship for every 2 cards you review, like training points, instead of 5-9 for every wild Pokémon it beats or catches (a new buddy reached 160 in about half a day). Friendship already earned is kept.
 - **Phone reviews find things too:** after a sync brings in cards you did on your phone, Ankimon works out the wild encounters they would have been and rolls each one. A shiny turns up as "While adventuring on mobile, you encountered this shiny ...!" (a non-legendary Pokémon from your region joins you); with the gyms package, legendaries turn up as the usual battle offer.

@@ -745,6 +745,14 @@ class TestWindow(QWidget):
         # Display the Pokémon image
         pkmnimage_file = f"{int(search_pokedex(self.enemy_pokemon.name.lower(),'species_id'))}.png"
         pkmnimage_path = frontdefault / pkmnimage_file
+        try:        # a shiny / female / Unown letter shows as itself (user 2026-11-13)
+            from ..functions.sprite_functions import get_sprite_path
+            pkmnimage_path = get_sprite_path(
+                "front", "png", int(search_pokedex(self.enemy_pokemon.name.lower(), 'species_id')),
+                bool(getattr(self.enemy_pokemon, "shiny", False)), getattr(self.enemy_pokemon, "gender", None),
+                form=getattr(self.enemy_pokemon, "special_form", None))
+        except Exception:
+            pass
 
         pkmnimage_label = QLabel()
         pkmnpixmap = QPixmap()

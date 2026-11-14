@@ -145,7 +145,8 @@ class PokemonTeamDialog(QDialog):
                    shiny as shiny,
                    json_extract(data, '$.gender') as gender,
                    json_extract(data, '$.type') as type,
-                   json_extract(data, '$.nickname') as nickname
+                   json_extract(data, '$.nickname') as nickname,
+                   json_extract(data, '$.special_form') as special_form
             FROM captured_pokemon
             ORDER BY individual_id ASC
         """)
@@ -164,6 +165,7 @@ class PokemonTeamDialog(QDialog):
                 # nothing to match on and every box shows 0 results.
                 "type": row[6] if len(row) > 6 else None,
                 "nickname": row[7] if len(row) > 7 else None,
+                "special_form": row[8] if len(row) > 8 else None,
             })
         return my_pokemon
 
@@ -213,7 +215,11 @@ class PokemonTeamDialog(QDialog):
                 pokemon = self.team_pokemon[i]
                 pokemon_name = pokemon['name']
                 pokemon_level = pokemon['level']
-                sprite_path = os.path.join(frontdefault, f"{pokemon['id']}.png")
+                try:        # shiny / female / Unown letter, like the picker (user 2026-11-12)
+                    sprite_path = get_sprite_path("front", "png", pokemon['id'], bool(pokemon.get('shiny')),
+                                                  pokemon.get('gender'), form=pokemon.get('special_form'))
+                except Exception:
+                    sprite_path = os.path.join(frontdefault, f"{pokemon['id']}.png")
 
                 # Update label with name and level (and what it's holding)
                 held = self._held_text(pokemon)

@@ -62,6 +62,17 @@ def _register_in_dex():
         pass
 
 
+def _sprite_for(species_id, individual_id=None):
+    """This species' front sprite in this Pokémon's look - shiny, female - like
+    the PC (user 2026-11-13: a shiny Beldum showed as a regular one evolving)."""
+    try:
+        from ..functions.sprite_functions import get_sprite_path
+        rec = (mw.ankimon_db.get_pokemon(individual_id) if individual_id else None) or {}
+        return get_sprite_path("front", "png", int(species_id), bool(rec.get("shiny")), rec.get("gender"))
+    except Exception:
+        return str(frontdefault / f"{species_id}.png")
+
+
 class EvoWindow(QWidget):
     def __init__(
         self,
@@ -94,7 +105,7 @@ class EvoWindow(QWidget):
     def open_dynamic_window(self):
         self.show()
 
-    def display_evo_complete(self, prevo_id: int, evo_id: int):
+    def display_evo_complete(self, prevo_id: int, evo_id: int, individual_id=None):
         """
         Displays the GUI notification that the given Pokémon has evolved.
 
@@ -107,7 +118,7 @@ class EvoWindow(QWidget):
         """
         self.clear_layout(self.layout())
         layout = self.layout()
-        pkmn_label = self._display_evo_complete_layout(prevo_id, evo_id)
+        pkmn_label = self._display_evo_complete_layout(prevo_id, evo_id, individual_id)
         layout.addWidget(pkmn_label)
         # Give the celebration screen an explicit way to dismiss itself instead
         # of leaving the user to find the OS window-close button (the only exit
@@ -121,7 +132,7 @@ class EvoWindow(QWidget):
         self.setMaximumHeight(300)
         self.show()
 
-    def _display_evo_complete_layout(self, prevo_id: int, evo_id: int):
+    def _display_evo_complete_layout(self, prevo_id: int, evo_id: int, individual_id=None):
         """
         Creates the GUI layout for the successful evolution.
 
@@ -141,7 +152,7 @@ class EvoWindow(QWidget):
         pixmap_bckg.load(str(bckgimage_path))
 
         # Display the Pokémon image
-        image_path = frontdefault / f"{evo_id}.png"
+        image_path = _sprite_for(evo_id, individual_id)
         image_pixmap = QPixmap()
         image_pixmap.load(str(image_path))
         image_pixmap = resize_pixmap_img(image_pixmap, 250)
@@ -223,8 +234,8 @@ class EvoWindow(QWidget):
         evo_name = return_name_for_id(evo_id)
 
         # Display the Pokémon image
-        pkmnimage_path = frontdefault / f"{prevo_id}.png"
-        pkmnimage_path2 = frontdefault / f"{(evo_id)}.png"
+        pkmnimage_path = _sprite_for(prevo_id, individual_id)
+        pkmnimage_path2 = _sprite_for(evo_id, individual_id)
         pkmnpixmap = QPixmap()
         pkmnpixmap.load(str(pkmnimage_path))
         pkmnpixmap2 = QPixmap()
@@ -426,7 +437,7 @@ class EvoWindow(QWidget):
                 exception=e,
                 message=f"Error occured in updating main_pokemon obj",
             )
-        self.display_evo_complete(prevo_id, evo_id)
+        self.display_evo_complete(prevo_id, evo_id, individual_id)
         check = check_for_badge(self.achievements, 16)
         if check is False:
             receive_badge(16, self.achievements)
